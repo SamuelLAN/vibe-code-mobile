@@ -151,6 +151,23 @@ class _ChatScreenState extends State<ChatScreen> {
     });
   }
 
+  Future<void> _sendVoiceMessage() async {
+    final chat = context.read<ChatService>();
+    HapticFeedback.lightImpact();
+
+    final attachment = Attachment(
+      id: 'voice_${DateTime.now().millisecondsSinceEpoch}',
+      path: 'mock_voice.m4a',
+      name: 'Voice Message',
+      type: AttachmentType.voice,
+      mime: 'audio/m4a',
+      sizeBytes: 1024 * 10,
+    );
+
+    await chat.sendUserMessage('[Voice Message]', [attachment]);
+    _scrollToBottom();
+  }
+
   void _toggleInputMode() {
     setState(() {
       _inputMode = _inputMode == InputMode.voice ? InputMode.text : InputMode.voice;
@@ -300,6 +317,7 @@ class _ChatScreenState extends State<ChatScreen> {
             onToggleMode: _toggleInputMode,
             onPickMedia: _showMediaPicker,
             onPickFiles: _pickFiles,
+            onVoiceSend: _sendVoiceMessage,
           ),
           ],
         ),

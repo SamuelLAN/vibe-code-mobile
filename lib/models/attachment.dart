@@ -1,6 +1,6 @@
 import 'dart:convert';
 
-enum AttachmentType { image, file }
+enum AttachmentType { image, file, voice }
 
 class Attachment {
   Attachment({

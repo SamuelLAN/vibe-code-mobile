@@ -104,6 +104,28 @@ class _AttachmentRow extends StatelessWidget {
         separatorBuilder: (_, __) => const SizedBox(width: 8),
         itemBuilder: (context, index) {
           final attachment = attachments[index];
+          if (attachment.type == AttachmentType.voice) {
+            return Container(
+              width: 120,
+              height: 48,
+              decoration: BoxDecoration(
+                color: Theme.of(context).colorScheme.primary.withOpacity(0.1),
+                borderRadius: BorderRadius.circular(24),
+              ),
+              child: Row(
+                children: [
+                  const SizedBox(width: 8),
+                  const Icon(Icons.volume_up, size: 20),
+                  const SizedBox(width: 8),
+                  const Expanded(
+                    child: Text('Voice message', style: TextStyle(fontSize: 12)),
+                  ),
+                  const Text("0:02", style: TextStyle(fontSize: 10)),
+                  const SizedBox(width: 12),
+                ],
+              ),
+            );
+          }
           return GestureDetector(
             onTap: attachment.type == AttachmentType.image
                 ? () {

@@ -4,9 +4,10 @@ import 'dart:math';
 import 'package:flutter/material.dart';
 
 class WaveformIndicator extends StatefulWidget {
-  const WaveformIndicator({super.key, required this.active});
+  const WaveformIndicator({super.key, required this.active, this.color});
 
   final bool active;
+  final Color? color;
 
   @override
   State<WaveformIndicator> createState() => _WaveformIndicatorState();
@@ -20,7 +21,7 @@ class _WaveformIndicatorState extends State<WaveformIndicator> {
   @override
   void initState() {
     super.initState();
-    _heights = List.generate(5, (_) => 6.0);
+    _heights = List.generate(40, (_) => 4.0);
     _toggle();
   }
 
@@ -35,15 +36,23 @@ class _WaveformIndicatorState extends State<WaveformIndicator> {
   void _toggle() {
     _timer?.cancel();
     if (widget.active) {
-      _timer = Timer.periodic(const Duration(milliseconds: 120), (_) {
-        setState(() {
-          _heights = List.generate(5, (_) => 6 + _rand.nextDouble() * 18);
-        });
+      _timer = Timer.periodic(const Duration(milliseconds: 60), (_) {
+        if (mounted) {
+          setState(() {
+            // Create a more continuous wave look
+            _heights = List.generate(40, (i) {
+              final val = 4 + _rand.nextDouble() * 24;
+              return val;
+            });
+          });
+        }
       });
     } else {
-      setState(() {
-        _heights = List.generate(5, (_) => 6.0);
-      });
+      if (mounted) {
+        setState(() {
+          _heights = List.generate(40, (_) => 4.0);
+        });
+      }
     }
   }
 
@@ -56,18 +65,19 @@ class _WaveformIndicatorState extends State<WaveformIndicator> {
   @override
   Widget build(BuildContext context) {
     return Row(
+      mainAxisAlignment: MainAxisAlignment.center,
       mainAxisSize: MainAxisSize.min,
       children: _heights
           .map(
             (height) => Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 2),
+              padding: const EdgeInsets.symmetric(horizontal: 1.0),
               child: AnimatedContainer(
-                duration: const Duration(milliseconds: 120),
-                width: 4,
+                duration: const Duration(milliseconds: 60),
+                width: 2.5,
                 height: height,
                 decoration: BoxDecoration(
-                  color: Theme.of(context).colorScheme.primary,
-                  borderRadius: BorderRadius.circular(6),
+                  color: widget.color ?? Theme.of(context).colorScheme.primary,
+                  borderRadius: BorderRadius.circular(2),
                 ),
               ),
             ),
