@@ -1,0 +1,52 @@
+# Flutter/Dart
+.pub-cache/
+.dart_tool/
+.flutter-plugins
+.flutter-plugins-dependencies
+packages
+pubspec.lock
+
+# Build
+build/
+.dart_tool/build/
+android/app/build/
+ios/Pods/
+ios/.symlinks/
+
+# IDE
+.idea/
+.vscode/
+*.iml
+
+# macOS
+.DS_Store
+*.DS_Store
+
+# Git
+.git/
+
+# Environment
+.env
+.env.*
+
+# Logs
+*.log
+
+# Test
+coverage/
+
+# Android
+*.jks
+*.keystore
+android/app/*.jks
+android/app/*.keystore
+
+# iOS
+ios/Pods/
+ios/Podfile.lock
+*.xcuserstate
+
+# Misc
+*.swp
+*.swo
+*~

@@ -1,0 +1,35 @@
+name: vibe_code_mobile
+description: Infinite board prototype for realtime financial graph analysis.
+publish_to: 'none'
+version: 0.1.0
+
+environment:
+  sdk: '>=3.3.0 <4.0.0'
+
+dependencies:
+  flutter:
+    sdk: flutter
+  flutter_secure_storage: ^9.2.2
+  provider: ^6.1.2
+  sqflite: ^2.3.3
+  path_provider: ^2.1.4
+  path: ^1.9.0
+  uuid: ^4.5.1
+  flutter_markdown: ^0.7.3+1
+  flutter_highlight: ^0.7.0
+  highlight: ^0.7.0
+  image_picker: ^1.1.2
+  file_picker: ^8.1.4
+  speech_to_text: ^6.6.1
+  permission_handler: ^11.3.1
+  google_fonts: ^6.2.1
+  http: ^1.2.2
+  url_launcher: ^6.3.0
+
+flutter:
+  uses-material-design: true
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  sqflite_common_ffi: ^2.3.3
