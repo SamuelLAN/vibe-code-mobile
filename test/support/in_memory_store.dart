@@ -1,4 +1,4 @@
-import 'package:vibe_code_mobile/services/key_value_store.dart';
+import 'package:plutux_code/services/key_value_store.dart';
 
 class InMemoryStore implements KeyValueStore {
   final Map<String, String> _values = {};

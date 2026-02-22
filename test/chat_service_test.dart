@@ -1,9 +1,9 @@
 import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
-import 'package:vibe_code_mobile/models/attachment.dart';
-import 'package:vibe_code_mobile/services/chat_repository.dart';
-import 'package:vibe_code_mobile/services/chat_service.dart';
+import 'package:plutux_code/models/attachment.dart';
+import 'package:plutux_code/services/chat_repository.dart';
+import 'package:plutux_code/services/chat_service.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 
 void main() {

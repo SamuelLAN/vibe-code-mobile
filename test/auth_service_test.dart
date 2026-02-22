@@ -1,5 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:vibe_code_mobile/services/auth_service.dart';
+import 'package:plutux_code/services/auth_service.dart';
 
 import 'support/in_memory_store.dart';
 

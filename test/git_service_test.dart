@@ -1,6 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:vibe_code_mobile/services/git_service.dart';
-import 'package:vibe_code_mobile/services/settings_service.dart';
+import 'package:plutux_code/services/git_service.dart';
+import 'package:plutux_code/services/settings_service.dart';
 
 import 'support/in_memory_store.dart';
 

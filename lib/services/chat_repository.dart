@@ -1,88 +1,105 @@
-import 'package:path/path.dart' as p;
-import 'package:path_provider/path_provider.dart';
-import 'package:sqflite/sqflite.dart';
-
 import '../models/chat.dart';
 import '../models/message.dart';
 
 class ChatRepository {
-  ChatRepository({DatabaseFactory? factory, String? dbPath})\n      : _factory = factory,\n        _dbPathOverride = dbPath;
+  // 硬编码示例数据
+  final List<Chat> _chats = [
+    Chat(
+      id: '1',
+      title: '欢迎对话',
+      createdAt: DateTime.now().subtract(const Duration(days: 1)),
+      updatedAt: DateTime.now(),
+      lastMessagePreview: '你好！欢迎使用这个聊天应用',
+    ),
+    Chat(
+      id: '2',
+      title: 'Flutter 开发',
+      createdAt: DateTime.now().subtract(const Duration(days: 3)),
+      updatedAt: DateTime.now().subtract(const Duration(hours: 2)),
+      lastMessagePreview: 'Flutter 是一个很棒的框架',
+    ),
+  ];
 
-  static const _dbName = 'vibe_chat.db';
-  static const _dbVersion = 1;
-
-  Database? _db;
-  final DatabaseFactory? _factory;
-  final String? _dbPathOverride;
+  final Map<String, List<Message>> _messages = {
+    '1': [
+      Message(
+        id: 'm1',
+        chatId: '1',
+        role: MessageRole.assistant,
+        content: '你好！欢迎使用这个聊天应用 👋\n\n我可以帮你：\n- 回答问题\n- 编写代码\n- 分析项目\n\n有什么我可以帮你的吗？',
+        createdAt: DateTime.now().subtract(const Duration(hours: 1)),
+        attachments: [],
+      ),
+    ],
+    '2': [
+      Message(
+        id: 'm2',
+        chatId: '2',
+        role: MessageRole.user,
+        content: '什么是 Flutter？',
+        createdAt: DateTime.now().subtract(const Duration(days: 3)),
+        attachments: [],
+      ),
+      Message(
+        id: 'm3',
+        chatId: '2',
+        role: MessageRole.assistant,
+        content: 'Flutter 是一个由 Google 开发的开源 UI 软件开发工具包。\n\n主要特点：\n- **跨平台**：一套代码同时支持 iOS、Android、Web、桌面\n- **高性能**：使用 Skia 渲染引擎\n- **热重载**：开发时实时预览修改\n- **丰富的组件**：Material Design 和 Cupertino 组件库',
+        createdAt: DateTime.now().subtract(const Duration(days: 3)),
+        attachments: [],
+      ),
+      Message(
+        id: 'm4',
+        chatId: '2',
+        role: MessageRole.user,
+        content: 'Flutter 和 React Native 哪个好？',
+        createdAt: DateTime.now().subtract(const Duration(hours: 2)),
+        attachments: [],
+      ),
+      Message(
+        id: 'm5',
+        chatId: '2',
+        role: MessageRole.assistant,
+        content: '两者各有优势：\n\n| 特性 | Flutter | React Native |\n|------|---------|--------------|\n| 渲染方式 | Skia 自绘 | 原生组件 |\n| 性能 | 更优 | 较好 |\n| 生态 | 增长中 | 更成熟 |\n| 学习曲线 | Dart | JavaScript |\n\n**选择建议**：\n- 如果追求极致性能，选 Flutter\n- 如果团队熟悉 JS，选 React Native',
+        createdAt: DateTime.now().subtract(const Duration(hours: 2)),
+        attachments: [],
+      ),
+    ],
+  };
 
   Future<void> init() async {
-    if (_db != null) return;
-    final dbPath = _dbPathOverride ?? p.join((await getApplicationDocumentsDirectory()).path, _dbName);
-    final factory = _factory ?? databaseFactory;
-    _db = await factory.openDatabase(
-      dbPath,
-      version: _dbVersion,
-      onCreate: (db, version) async {
-        await db.execute('''
-          CREATE TABLE chats (
-            id TEXT PRIMARY KEY,
-            title TEXT NOT NULL,
-            createdAt TEXT NOT NULL,
-            updatedAt TEXT NOT NULL,
-            lastMessagePreview TEXT
-          )
-        ''');
-        await db.execute('''
-          CREATE TABLE messages (
-            id TEXT PRIMARY KEY,
-            chatId TEXT NOT NULL,
-            role TEXT NOT NULL,
-            content TEXT NOT NULL,
-            createdAt TEXT NOT NULL,
-            attachments TEXT,
-            FOREIGN KEY(chatId) REFERENCES chats(id) ON DELETE CASCADE
-          )
-        ''');
-      },
-    );
+    // 模拟异步初始化
+    await Future.delayed(const Duration(milliseconds: 100));
   }
 
   Future<List<Chat>> getChats() async {
-    final db = _db!;
-    final rows = await db.query('chats', orderBy: 'updatedAt DESC');
-    return rows.map(Chat.fromMap).toList();
+    return List.from(_chats)..sort((a, b) => b.updatedAt.compareTo(a.updatedAt));
   }
 
   Future<Chat> createChat(Chat chat) async {
-    final db = _db!;
-    await db.insert('chats', chat.toMap());
+    _chats.add(chat);
+    _messages[chat.id] = [];
     return chat;
   }
 
   Future<void> updateChat(Chat chat) async {
-    final db = _db!;
-    await db.update('chats', chat.toMap(), where: 'id = ?', whereArgs: [chat.id]);
+    final index = _chats.indexWhere((c) => c.id == chat.id);
+    if (index != -1) {
+      _chats[index] = chat;
+    }
   }
 
   Future<void> deleteChat(String chatId) async {
-    final db = _db!;
-    await db.delete('messages', where: 'chatId = ?', whereArgs: [chatId]);
-    await db.delete('chats', where: 'id = ?', whereArgs: [chatId]);
+    _chats.removeWhere((c) => c.id == chatId);
+    _messages.remove(chatId);
   }
 
   Future<List<Message>> getMessages(String chatId) async {
-    final db = _db!;
-    final rows = await db.query(
-      'messages',
-      where: 'chatId = ?',
-      whereArgs: [chatId],
-      orderBy: 'createdAt ASC',
-    );
-    return rows.map(Message.fromMap).toList();
+    return List.from(_messages[chatId] ?? []);
   }
 
   Future<void> addMessage(Message message) async {
-    final db = _db!;
-    await db.insert('messages', message.toMap());
+    _messages.putIfAbsent(message.chatId, () => []);
+    _messages[message.chatId]!.add(message);
   }
 }

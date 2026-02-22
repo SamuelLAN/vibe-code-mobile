@@ -2,16 +2,7 @@ import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_markdown/flutter_markdown.dart';
-import 'package:flutter_highlight/flutter_highlight.dart';
 import 'package:url_launcher/url_launcher.dart';
-import 'package:highlight/languages/dart.dart';
-import 'package:highlight/languages/json.dart';
-import 'package:highlight/languages/python.dart';
-import 'package:highlight/languages/javascript.dart';
-import 'package:highlight/languages/bash.dart';
-import 'package:highlight/languages/yaml.dart';
-import 'package:highlight/themes/github.dart';
-import 'package:highlight/themes/github-dark.dart';
 
 import '../models/attachment.dart';
 import '../models/message.dart';
@@ -165,22 +156,16 @@ class _CodeBlockBuilder extends MarkdownElementBuilder {
 
   @override
   Widget? visitElementAfter(element, TextStyle? preferredStyle) {
-    final language = element.attributes['class']?.replaceFirst('language-', '') ?? '';
-    return HighlightView(
-      element.textContent,
-      language: language,
-      theme: isDark ? githubDarkTheme : githubTheme,
+    return Container(
       padding: const EdgeInsets.all(12),
-      textStyle: const TextStyle(fontFamily: 'monospace', fontSize: 13),
-      languages: {
-        'dart': dart,
-        'json': json,
-        'python': python,
-        'js': javascript,
-        'javascript': javascript,
-        'bash': bash,
-        'yaml': yaml,
-      },
+      decoration: BoxDecoration(
+        color: isDark ? Colors.grey[800] : Colors.grey[100],
+        borderRadius: BorderRadius.circular(8),
+      ),
+      child: SelectableText(
+        element.textContent,
+        style: const TextStyle(fontFamily: 'monospace', fontSize: 13),
+      ),
     );
   }
 }

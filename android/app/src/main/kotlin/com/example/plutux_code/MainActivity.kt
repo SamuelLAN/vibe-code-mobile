@@ -1,4 +1,4 @@
-package com.example.vibe_code_mobile
+package com.example.plutux_code
 
 import io.flutter.embedding.android.FlutterActivity
 

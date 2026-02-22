@@ -87,7 +87,33 @@ class _ChatScreenState extends State<ChatScreen> {
 
     for (final file in result.files) {
       if (file.path == null) continue;
-      await _addAttachment(File(file.path!), AttachmentType.file, mime: file.mimeType ?? 'application/octet-stream');
+      final extension = file.extension?.toLowerCase() ?? '';
+      final mime = _getMimeType(extension);
+      await _addAttachment(File(file.path!), AttachmentType.file, mime: mime);
+    }
+  }
+
+  String _getMimeType(String extension) {
+    switch (extension) {
+      case 'pdf':
+        return 'application/pdf';
+      case 'doc':
+      case 'docx':
+        return 'application/msword';
+      case 'xls':
+      case 'xlsx':
+        return 'application/vnd.ms-excel';
+      case 'txt':
+        return 'text/plain';
+      case 'png':
+        return 'image/png';
+      case 'jpg':
+      case 'jpeg':
+        return 'image/jpeg';
+      case 'gif':
+        return 'image/gif';
+      default:
+        return 'application/octet-stream';
     }
   }
 
