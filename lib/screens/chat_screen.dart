@@ -76,17 +76,54 @@ class _ChatScreenState extends State<ChatScreen> {
   }
 
   Future<void> _pickFromGallery() async {
+    final remainingSlots = 9 - _pendingAttachments.length;
+    if (remainingSlots <= 0) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('已达到最大附件数量限制 (9个)')),
+      );
+      return;
+    }
+
     final picker = ImagePicker();
-    final photo = await picker.pickImage(source: ImageSource.gallery, imageQuality: 80);
-    if (photo == null) return;
-    await _addAttachment(File(photo.path), AttachmentType.image, mime: 'image/jpeg');
+    final photos = await picker.pickMultiImage(imageQuality: 80);
+    if (photos.isEmpty) return;
+
+    final photosToAdd = photos.take(remainingSlots).toList();
+    if (photosToAdd.length < photos.length) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('已选择前 $remainingSlots 张图片，最多可添加 9 个附件')),
+      );
+    }
+
+    for (final photo in photosToAdd) {
+      await _addAttachment(File(photo.path), AttachmentType.image, mime: 'image/jpeg');
+    }
   }
 
   Future<void> _pickFiles() async {
+    final remainingSlots = 9 - _pendingAttachments.length;
+    if (remainingSlots <= 0) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('已达到最大附件数量限制 (9个)')),
+      );
+      return;
+    }
+
     final result = await FilePicker.platform.pickFiles(allowMultiple: true);
     if (result == null) return;
 
-    for (final file in result.files) {
+    final filesToAdd = result.files.take(remainingSlots).toList();
+    if (filesToAdd.length < result.files.length) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('已选择前 $remainingSlots 个文件，最多可添加 9 个附件')),
+      );
+    }
+
+    for (final file in filesToAdd) {
       if (file.path == null) continue;
       final extension = file.extension?.toLowerCase() ?? '';
       final mime = _getMimeType(extension);
@@ -235,6 +272,13 @@ class _ChatScreenState extends State<ChatScreen> {
                   : const Icon(Icons.insert_drive_file),
               title: Text(attachment.name),
               onTap: () {
+                if (_pendingAttachments.length >= 9) {
+                  Navigator.of(context).pop();
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(content: Text('已达到最大附件数量限制 (9个)')),
+                  );
+                  return;
+                }
                 Navigator.of(context).pop();
                 setState(() {
                   _pendingAttachments.add(attachment);
