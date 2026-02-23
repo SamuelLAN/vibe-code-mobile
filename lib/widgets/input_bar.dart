@@ -17,6 +17,8 @@ class InputBar extends StatefulWidget {
     required this.onPickMedia,
     required this.onPickFiles,
     this.onVoiceSend,
+    this.isFullscreen = false,
+    this.onToggleFullscreen,
   });
 
   final InputMode mode;
@@ -28,6 +30,8 @@ class InputBar extends StatefulWidget {
   final VoidCallback onPickMedia;
   final VoidCallback onPickFiles;
   final VoidCallback? onVoiceSend;
+  final bool isFullscreen;
+  final VoidCallback? onToggleFullscreen;
 
   @override
   State<InputBar> createState() => _InputBarState();
@@ -37,45 +41,83 @@ class _InputBarState extends State<InputBar> {
   bool _isRecording = false;
   bool _isCancelling = false;
   double _dragY = 0;
+  bool _isFocused = false;
+  final FocusNode _focusNode = FocusNode();
   static const double _cancelThreshold = 100.0;
 
-  void _onLongPressStart(LongPressStartDetails details) {
-    setState(() {
-      _isRecording = true;
-      _isCancelling = false;
-      _dragY = 0;
-    });
-    HapticFeedback.mediumImpact();
+  bool get _isFullscreen => widget.isFullscreen;
+
+  @override
+  void initState() {
+    super.initState();
+    _focusNode.addListener(_onFocusChange);
+    widget.controller.addListener(_onTextChange);
   }
 
-  void _onLongPressMoveUpdate(LongPressMoveUpdateDetails details) {
-    if (!_isRecording) return;
+  @override
+  void dispose() {
+    _focusNode.removeListener(_onFocusChange);
+    _focusNode.dispose();
+    widget.controller.removeListener(_onTextChange);
+    super.dispose();
+  }
+
+  void _onFocusChange() {
     setState(() {
-      _dragY = -details.localOffsetFromOrigin.dy;
-      _isCancelling = _dragY > _cancelThreshold;
+      _isFocused = _focusNode.hasFocus;
     });
   }
 
-  void _onLongPressEnd(LongPressEndDetails details) {
-    if (!_isRecording) return;
-    
-    if (!_isCancelling) {
-      if (widget.onVoiceSend != null) {
-        widget.onVoiceSend!();
-      } else {
-        widget.onSend();
-      }
-    }
+  void _onTextChange() {
+    setState(() {});
+  }
 
-    setState(() {
-      _isRecording = false;
-      _isCancelling = false;
-    });
-    HapticFeedback.lightImpact();
+  bool get _hasText => widget.controller.text.isNotEmpty;
+
+  int get _lineCount {
+    final text = widget.controller.text;
+    if (text.isEmpty) return 0;
+    return '\n'.allMatches(text).length + 1;
+  }
+
+  bool get _hasMultipleLines => _lineCount >= 2;
+
+  Widget _buildSendButton() {
+    return Container(
+      width: 36,
+      height: 36,
+      decoration: const BoxDecoration(
+        color: Color(0xFF2196F3),
+        shape: BoxShape.circle,
+      ),
+      child: IconButton(
+        onPressed: widget.onSend,
+        padding: EdgeInsets.zero,
+        icon: const Icon(Icons.send, size: 20, color: Colors.white),
+      ),
+    );
+  }
+
+  Widget _buildFullscreenButton() {
+    return IconButton(
+      onPressed: widget.onToggleFullscreen,
+      icon: const Icon(Icons.fullscreen, size: 28, color: Colors.black54),
+    );
+  }
+
+  Widget _buildCollapseButton() {
+    return IconButton(
+      onPressed: widget.onToggleFullscreen,
+      icon: const Icon(Icons.keyboard_arrow_down, size: 30, color: Colors.black87),
+    );
   }
 
   @override
   Widget build(BuildContext context) {
+    if (_isFullscreen) {
+      return _buildFullscreenInput();
+    }
+
     final isVoice = widget.mode == InputMode.voice;
 
     return Stack(
@@ -127,7 +169,8 @@ class _InputBarState extends State<InputBar> {
                               ),
                               child: TextField(
                                 controller: widget.controller,
-                                maxLines: 4,
+                                focusNode: _focusNode,
+                                maxLines: 8,
                                 minLines: 1,
                                 style: const TextStyle(fontSize: 17),
                                 decoration: const InputDecoration(
@@ -140,14 +183,28 @@ class _InputBarState extends State<InputBar> {
                               ),
                             ),
                     ),
-                    IconButton(
-                      onPressed: widget.onToggleMode,
-                      icon: Icon(isVoice ? Icons.keyboard_alt_outlined : Icons.mic_none_outlined, size: 30, color: Colors.black87),
-                    ),
-                    IconButton(
-                      onPressed: widget.onPickFiles,
-                      icon: const Icon(Icons.add_circle_outline, size: 30, color: Colors.black87),
-                    ),
+                    if (_isFocused && _hasText) ...[
+                      _buildSendButton(),
+                    ] else if (_hasMultipleLines) ...[
+                      _buildFullscreenButton(),
+                      IconButton(
+                        onPressed: widget.onToggleMode,
+                        icon: Icon(isVoice ? Icons.keyboard_alt_outlined : Icons.mic_none_outlined, size: 30, color: Colors.black87),
+                      ),
+                      IconButton(
+                        onPressed: widget.onPickFiles,
+                        icon: const Icon(Icons.add_circle_outline, size: 30, color: Colors.black87),
+                      ),
+                    ] else ...[
+                      IconButton(
+                        onPressed: widget.onToggleMode,
+                        icon: Icon(isVoice ? Icons.keyboard_alt_outlined : Icons.mic_none_outlined, size: 30, color: Colors.black87),
+                      ),
+                      IconButton(
+                        onPressed: widget.onPickFiles,
+                        icon: const Icon(Icons.add_circle_outline, size: 30, color: Colors.black87),
+                      ),
+                    ],
                   ],
                 ),
               ),
@@ -163,6 +220,98 @@ class _InputBarState extends State<InputBar> {
           ),
       ],
     );
+  }
+
+  Widget _buildFullscreenInput() {
+    return Container(
+      height: MediaQuery.of(context).size.height,
+      color: Colors.white,
+      child: SafeArea(
+        top: false,
+        child: Column(
+          children: [
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
+              decoration: BoxDecoration(
+                border: Border(bottom: BorderSide(color: Colors.grey.withOpacity(0.2), width: 0.5)),
+              ),
+              child: Row(
+                children: [
+                  IconButton(
+                    onPressed: widget.onPickMedia,
+                    icon: const Icon(Icons.camera_alt_outlined, size: 30, color: Colors.black87),
+                  ),
+                  const Spacer(),
+                  _buildCollapseButton(),
+                ],
+              ),
+            ),
+            Expanded(
+              child: Container(
+                padding: const EdgeInsets.all(16),
+                child: TextField(
+                  controller: widget.controller,
+                  focusNode: _focusNode,
+                  maxLines: null,
+                  expands: true,
+                  textAlignVertical: TextAlignVertical.top,
+                  style: const TextStyle(fontSize: 17),
+                  decoration: const InputDecoration(
+                    hintText: '发消息...',
+                    hintStyle: TextStyle(color: Colors.grey),
+                    border: InputBorder.none,
+                  ),
+                ),
+              ),
+            ),
+            Container(
+              padding: const EdgeInsets.all(16),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.end,
+                children: [
+                  _buildSendButton(),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  void _onLongPressStart(LongPressStartDetails details) {
+    setState(() {
+      _isRecording = true;
+      _isCancelling = false;
+      _dragY = 0;
+    });
+    HapticFeedback.mediumImpact();
+  }
+
+  void _onLongPressMoveUpdate(LongPressMoveUpdateDetails details) {
+    if (!_isRecording) return;
+    setState(() {
+      _dragY = -details.localOffsetFromOrigin.dy;
+      _isCancelling = _dragY > _cancelThreshold;
+    });
+  }
+
+  void _onLongPressEnd(LongPressEndDetails details) {
+    if (!_isRecording) return;
+    
+    if (!_isCancelling) {
+      if (widget.onVoiceSend != null) {
+        widget.onVoiceSend!();
+      } else {
+        widget.onSend();
+      }
+    }
+
+    setState(() {
+      _isRecording = false;
+      _isCancelling = false;
+    });
+    HapticFeedback.lightImpact();
   }
 
   Widget _buildRecordingOverlay() {

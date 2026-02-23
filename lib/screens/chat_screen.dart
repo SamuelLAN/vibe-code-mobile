@@ -31,6 +31,7 @@ class _ChatScreenState extends State<ChatScreen> {
   final List<Attachment> _pendingAttachments = [];
   final List<Attachment> _recentUploads = [];
   InputMode _inputMode = InputMode.voice;
+  bool _isFullscreenInput = false;
 
   @override
   void dispose() {
@@ -278,44 +279,86 @@ class _ChatScreenState extends State<ChatScreen> {
       ),
       body: Column(
         children: [
-          Expanded(
-            child: ListView.builder(
-              controller: _scrollController,
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-              itemCount: messages.length,
-              itemBuilder: (context, index) {
-                final message = messages[index];
-                return MessageBubble(
-                  message: message,
-                  onCopy: () {
-                    Clipboard.setData(ClipboardData(text: message.content));
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(content: Text('Message copied to clipboard.')),
-                    );
-                  },
-                  onRetry: message.role == MessageRole.assistant
-                      ? () => chat.retryLastUserMessage()
-                      : null,
-                );
-              },
+          if (!_isFullscreenInput)
+            Expanded(
+              child: messages.isEmpty
+                  ? Container(
+                      color: Colors.white,
+                      child: const Center(
+                        child: Text(
+                          '开始新对话',
+                          style: TextStyle(
+                            fontSize: 18,
+                            color: Colors.grey,
+                            fontWeight: FontWeight.w500,
+                          ),
+                        ),
+                      ),
+                    )
+                  : ListView.builder(
+                      controller: _scrollController,
+                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                      itemCount: messages.length,
+                      itemBuilder: (context, index) {
+                        final message = messages[index];
+                        return MessageBubble(
+                        message: message,
+                        onCopy: () {
+                          Clipboard.setData(ClipboardData(text: message.content));
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            const SnackBar(content: Text('Message copied to clipboard.')),
+                          );
+                        },
+                        onRetry: message.role == MessageRole.assistant
+                            ? () => chat.retryLastUserMessage()
+                            : null,
+                      );
+                    },
+                    ),
             ),
-          ),
-          if (_pendingAttachments.isNotEmpty)
+          if (!_isFullscreenInput && _pendingAttachments.isNotEmpty)
             AttachmentTray(
               attachments: _pendingAttachments,
               onRemove: _removeAttachment,
             ),
-          InputBar(
-            mode: _inputMode,
-            controller: _textController,
-            isGenerating: chat.isGenerating,
-            onSend: _sendMessage,
-            onStop: chat.stopGeneration,
-            onToggleMode: _toggleInputMode,
-            onPickMedia: _showMediaPicker,
-            onPickFiles: _pickFiles,
-            onVoiceSend: _sendVoiceMessage,
-          ),
+          if (_isFullscreenInput)
+            Expanded(
+              child: InputBar(
+                mode: _inputMode,
+                controller: _textController,
+                isGenerating: chat.isGenerating,
+                onSend: _sendMessage,
+                onStop: chat.stopGeneration,
+                onToggleMode: _toggleInputMode,
+                onPickMedia: _showMediaPicker,
+                onPickFiles: _pickFiles,
+                onVoiceSend: _sendVoiceMessage,
+                isFullscreen: true,
+                onToggleFullscreen: () {
+                  setState(() {
+                    _isFullscreenInput = false;
+                  });
+                },
+              ),
+            )
+          else
+            InputBar(
+              mode: _inputMode,
+              controller: _textController,
+              isGenerating: chat.isGenerating,
+              onSend: _sendMessage,
+              onStop: chat.stopGeneration,
+              onToggleMode: _toggleInputMode,
+              onPickMedia: _showMediaPicker,
+              onPickFiles: _pickFiles,
+              onVoiceSend: _sendVoiceMessage,
+              isFullscreen: false,
+              onToggleFullscreen: () {
+                setState(() {
+                  _isFullscreenInput = true;
+                });
+              },
+            ),
         ],
       ),
     );
