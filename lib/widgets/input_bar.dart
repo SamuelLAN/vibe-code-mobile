@@ -142,9 +142,9 @@ class _InputBarState extends State<InputBar> {
                     Expanded(
                       child: isVoice
                           ? GestureDetector(
-                              onLongPressStart: _onLongPressStart,
-                              onLongPressMoveUpdate: _onLongPressMoveUpdate,
-                              onLongPressEnd: _onLongPressEnd,
+                              onPanStart: _onPanStart,
+                              onPanUpdate: _onPanUpdate,
+                              onPanEnd: _onPanEnd,
                               child: Container(
                                 height: 44,
                                 alignment: Alignment.center,
@@ -279,7 +279,7 @@ class _InputBarState extends State<InputBar> {
     );
   }
 
-  void _onLongPressStart(LongPressStartDetails details) {
+  void _onPanStart(DragStartDetails details) {
     setState(() {
       _isRecording = true;
       _isCancelling = false;
@@ -288,15 +288,19 @@ class _InputBarState extends State<InputBar> {
     HapticFeedback.mediumImpact();
   }
 
-  void _onLongPressMoveUpdate(LongPressMoveUpdateDetails details) {
+  void _onPanUpdate(DragUpdateDetails details) {
     if (!_isRecording) return;
     setState(() {
-      _dragY = -details.localOffsetFromOrigin.dy;
+      _dragY = -details.localPosition.dy;
       _isCancelling = _dragY > _cancelThreshold;
     });
   }
 
-  void _onLongPressEnd(LongPressEndDetails details) {
+  void _onPanEnd(DragEndDetails details) {
+    _endRecording();
+  }
+
+  void _endRecording() {
     if (!_isRecording) return;
     
     if (!_isCancelling) {
@@ -338,6 +342,7 @@ class _InputBarState extends State<InputBar> {
         children: [
           Text(
             text,
+            key: ValueKey(_isCancelling),
             style: const TextStyle(
               color: Colors.white,
               fontSize: 18,
