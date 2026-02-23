@@ -20,6 +20,7 @@ class _GitDrawerState extends State<GitDrawer> {
   GitOpStatus _commitStatus = GitOpStatus.idle;
   GitOpStatus _resetStatus = GitOpStatus.idle;
   GitOpStatus _stashStatus = GitOpStatus.idle;
+  GitOpStatus _stashPopStatus = GitOpStatus.idle;
 
   String? _toastMessage;
   Color? _toastColor;
@@ -130,6 +131,19 @@ class _GitDrawerState extends State<GitDrawer> {
                           '更改已暂存',
                           delay: 1200,
                           setStatus: (s) => setState(() => _stashStatus = s),
+                        ),
+                      ),
+                      _buildGitOpButton(
+                        icon: Icons.unarchive_rounded,
+                        label: 'Stash Pop',
+                        sublabel: '恢复暂存的更改',
+                        status: _stashPopStatus,
+                        accentColor: GitColors.stash,
+                        onPress: () => _runOp(
+                          _stashPopStatus,
+                          '更改已恢复',
+                          delay: 1200,
+                          setStatus: (s) => setState(() => _stashPopStatus = s),
                         ),
                       ),
                       _buildGitOpButton(
