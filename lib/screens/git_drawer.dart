@@ -13,7 +13,40 @@ class GitDrawer extends StatefulWidget {
 }
 
 class _GitDrawerState extends State<GitDrawer> {
-  bool _advancedOpen = false;
+  List<String> _branches = [];
+  String _currentBranch = 'main';
+  bool _isLoading = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadBranches();
+  }
+
+  Future<void> _loadBranches() async {
+    final git = context.read<GitService>();
+    setState(() => _isLoading = true);
+    try {
+      final branches = await git.getBranches();
+      final currentBranch = await git.getCurrentBranch();
+      if (mounted) {
+        setState(() {
+          _branches = branches;
+          _currentBranch = currentBranch;
+        });
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Failed to load branches: $e')),
+        );
+      }
+    } finally {
+      if (mounted) {
+        setState(() => _isLoading = false);
+      }
+    }
+  }
 
   Future<void> _showResult(GitOperationResult result) async {
     if (!mounted) return;
@@ -23,402 +56,216 @@ class _GitDrawerState extends State<GitDrawer> {
         backgroundColor: result.success ? Colors.green : Colors.red,
       ),
     );
+    if (result.success) {
+      await _loadBranches();
+    }
   }
 
-  Future<void> _openCommitDialog(GitService git) async {
-    final files = await git.status();
+  Future<void> _createBranch() async {
+    final git = context.read<GitService>();
     final controller = TextEditingController();
-    final selected = <String>{...files};
 
     if (!mounted) return;
-    await showDialog<void>(
+    final result = await showDialog<String>(
       context: context,
-      builder: (context) => StatefulBuilder(
-        builder: (context, setLocal) => AlertDialog(
-          title: const Text('Commit changes'),
-          content: SizedBox(
-            width: 320,
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                TextField(
-                  controller: controller,
-                  decoration: const InputDecoration(labelText: 'Commit message'),
-                ),
-                const SizedBox(height: 12),
-                Align(
-                  alignment: Alignment.centerLeft,
-                  child: Text('Changed files', style: Theme.of(context).textTheme.labelLarge),
-                ),
-                const SizedBox(height: 8),
-                Flexible(
-                  child: ListView(
-                    shrinkWrap: true,
-                    children: files
-                        .map(
-                          (file) => CheckboxListTile(
-                            value: selected.contains(file),
-                            title: Text(file),
-                            onChanged: (value) {
-                              if (value == true) {
-                                selected.add(file);
-                              } else {
-                                selected.remove(file);
-                              }
-                              setLocal(() {});
-                            },
-                          ),
-                        )
-                        .toList(),
-                  ),
-                ),
-                Row(
-                  children: [
-                    TextButton(
-                      onPressed: () {
-                        selected
-                          ..clear()
-                          ..addAll(files);
-                        setLocal(() {});
-                      },
-                      child: const Text('Stage All'),
-                    ),
-                    TextButton(
-                      onPressed: () {
-                        selected.clear();
-                        setLocal(() {});
-                      },
-                      child: const Text('Unstage All'),
-                    ),
-                  ],
-                ),
-              ],
-            ),
+      builder: (context) => AlertDialog(
+        title: const Text('新建分支'),
+        content: TextField(
+          controller: controller,
+          autofocus: true,
+          decoration: const InputDecoration(
+            hintText: '分支名称',
           ),
-          actions: [
-            TextButton(onPressed: () => Navigator.of(context).pop(), child: const Text('Cancel')),
-            ElevatedButton(
-              onPressed: () async {
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(),
+            child: const Text('取消'),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.of(context).pop(controller.text.trim()),
+            child: const Text('创建'),
+          ),
+        ],
+      ),
+    );
+
+    if (result != null && result.isNotEmpty) {
+      final opResult = await git.createBranch(name: result);
+      await _showResult(opResult);
+    }
+  }
+
+  Future<void> _deleteBranch(String branchName) async {
+    final git = context.read<GitService>();
+
+    if (!mounted) return;
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('删除分支'),
+        content: Text('确定要删除分支 "$branchName" 吗？'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: const Text('取消'),
+          ),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
+            onPressed: () => Navigator.of(context).pop(true),
+            child: const Text('删除'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirm == true) {
+      final opResult = await git.deleteBranch(name: branchName);
+      await _showResult(opResult);
+    }
+  }
+
+  Future<void> _switchBranch(String branchName) async {
+    final git = context.read<GitService>();
+    final opResult = await git.checkout(branch: branchName);
+    await _showResult(opResult);
+  }
+
+  void _showBranchOptions(String branchName) {
+    showModalBottomSheet<void>(
+      context: context,
+      builder: (context) => SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            ListTile(
+              leading: const Icon(Icons.check_circle_outline),
+              title: const Text('切换分支'),
+              onTap: () {
                 Navigator.of(context).pop();
-                final result = await git.commit(
-                  message: controller.text.trim(),
-                  files: selected.toList(),
-                );
-                await _showResult(result);
+                _switchBranch(branchName);
               },
-              child: const Text('Commit'),
             ),
+            if (branchName != _currentBranch)
+              ListTile(
+                leading: const Icon(Icons.merge_type),
+                title: const Text('合并到当前分支'),
+                onTap: () {
+                  Navigator.of(context).pop();
+                  _mergeBranch(branchName);
+                },
+              ),
+            if (branchName != 'main' && branchName != _currentBranch)
+              ListTile(
+                leading: const Icon(Icons.delete_outline, color: Colors.red),
+                title: const Text('删除分支', style: TextStyle(color: Colors.red)),
+                onTap: () {
+                  Navigator.of(context).pop();
+                  _deleteBranch(branchName);
+                },
+              ),
           ],
         ),
       ),
     );
   }
 
-  Future<void> _openResetDialog(GitService git) async {
-    final commits = await git.log();
-    GitCommit? selected = commits.first;
-    String mode = 'mixed';
-
-    if (!mounted) return;
-    await showDialog<void>(
-      context: context,
-      builder: (context) => StatefulBuilder(
-        builder: (context, setLocal) => AlertDialog(
-          title: const Text('Reset to commit'),
-          content: SizedBox(
-            width: 320,
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Flexible(
-                  child: ListView.builder(
-                    shrinkWrap: true,
-                    itemCount: commits.length,
-                    itemBuilder: (context, index) {
-                      final commit = commits[index];
-                      return RadioListTile<GitCommit>(
-                        value: commit,
-                        groupValue: selected,
-                        title: Text('${commit.hash} • ${commit.message}'),
-                        subtitle: Text(commit.date.toLocal().toString()),
-                        onChanged: (value) {
-                          selected = value;
-                          setLocal(() {});
-                        },
-                      );
-                    },
-                  ),
-                ),
-                const SizedBox(height: 8),
-                DropdownButtonFormField<String>(
-                  value: mode,
-                  items: const [
-                    DropdownMenuItem(value: 'soft', child: Text('Soft reset')),
-                    DropdownMenuItem(value: 'mixed', child: Text('Mixed reset')),
-                    DropdownMenuItem(value: 'hard', child: Text('Hard reset')),
-                  ],
-                  onChanged: (value) {
-                    if (value != null) {
-                      mode = value;
-                      setLocal(() {});
-                    }
-                  },
-                  decoration: const InputDecoration(labelText: 'Reset mode'),
-                ),
-              ],
-            ),
-          ),
-          actions: [
-            TextButton(onPressed: () => Navigator.of(context).pop(), child: const Text('Cancel')),
-            ElevatedButton(
-              onPressed: () async {
-                if (mode == 'hard') {
-                  final confirm = await showDialog<bool>(
-                    context: context,
-                    builder: (context) => AlertDialog(
-                      title: const Text('Confirm hard reset'),
-                      content: const Text('Hard reset will discard local changes.'),
-                      actions: [
-                        TextButton(onPressed: () => Navigator.of(context).pop(false), child: const Text('Cancel')),
-                        ElevatedButton(onPressed: () => Navigator.of(context).pop(true), child: const Text('Reset')),
-                      ],
-                    ),
-                  );
-                  if (confirm != true) return;
-                }
-                Navigator.of(context).pop();
-                final result = await git.reset(hash: selected!.hash, mode: mode);
-                await _showResult(result);
-              },
-              child: const Text('Reset'),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Future<void> _openConfigureDialog(SettingsService settings) async {
-    final baseUrlController = TextEditingController(text: await settings.getGitBaseUrl() ?? '');
-    final repoController = TextEditingController(text: await settings.getGitRepoPath() ?? '');
-    final tokenController = TextEditingController(text: await settings.getGitToken() ?? '');
-    bool mockMode = await settings.getGitMockMode();
-
-    if (!mounted) return;
-    await showDialog<void>(
-      context: context,
-      builder: (context) => StatefulBuilder(
-        builder: (context, setLocal) => AlertDialog(
-          title: const Text('Git configuration'),
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              TextField(
-                controller: baseUrlController,
-                decoration: const InputDecoration(labelText: 'Git backend base URL'),
-              ),
-              const SizedBox(height: 8),
-              TextField(
-                controller: repoController,
-                decoration: const InputDecoration(labelText: 'Repository path'),
-              ),
-              const SizedBox(height: 8),
-              TextField(
-                controller: tokenController,
-                decoration: const InputDecoration(labelText: 'Access token (optional)'),
-                obscureText: true,
-              ),
-              const SizedBox(height: 8),
-              SwitchListTile(
-                value: mockMode,
-                onChanged: (value) => setLocal(() => mockMode = value),
-                title: const Text('Use mock git responses'),
-              ),
-            ],
-          ),
-          actions: [
-            TextButton(onPressed: () => Navigator.of(context).pop(), child: const Text('Cancel')),
-            ElevatedButton(
-              onPressed: () async {
-                await settings.setGitBaseUrl(baseUrlController.text);
-                await settings.setGitRepoPath(repoController.text);
-                await settings.setGitToken(tokenController.text);
-                await settings.setGitMockMode(mockMode);
-                if (mounted) Navigator.of(context).pop();
-              },
-              child: const Text('Save'),
-            ),
-          ],
-        ),
-      ),
-    );
+  Future<void> _mergeBranch(String sourceBranch) async {
+    final git = context.read<GitService>();
+    final opResult = await git.mergeBranch(source: sourceBranch, target: _currentBranch);
+    await _showResult(opResult);
   }
 
   @override
   Widget build(BuildContext context) {
-    final git = context.watch<GitService>();
-    final settings = context.read<SettingsService>();
-
     return Drawer(
       child: SafeArea(
-        child: ListView(
-          padding: const EdgeInsets.all(16),
+        child: Column(
           children: [
-            Text('Git Operations', style: Theme.of(context).textTheme.titleLarge),
-            const SizedBox(height: 12),
-            ListTile(
-              leading: const Icon(Icons.download),
-              title: const Text('Pull'),
-              onTap: git.isBusy
-                  ? null
-                  : () async {
-                      final result = await git.pull();
-                      await _showResult(result);
-                    },
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+              decoration: BoxDecoration(
+                border: Border(bottom: BorderSide(color: Colors.grey.withOpacity(0.2))),
+              ),
+              child: Row(
+                children: [
+                  const Text(
+                    '分支',
+                    style: TextStyle(
+                      fontSize: 18,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                  const Spacer(),
+                  IconButton(
+                    icon: const Icon(Icons.refresh),
+                    onPressed: _isLoading ? null : _loadBranches,
+                  ),
+                  IconButton(
+                    icon: const Icon(Icons.add),
+                    onPressed: _createBranch,
+                  ),
+                ],
+              ),
             ),
-            ListTile(
-              leading: const Icon(Icons.update),
-              title: const Text('Reset'),
-              onTap: git.isBusy ? null : () async => _openResetDialog(git),
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+              color: Colors.grey.withOpacity(0.1),
+              child: Row(
+                children: [
+                  const Text(
+                    '当前分支: ',
+                    style: TextStyle(color: Colors.grey),
+                  ),
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFF2196F3).withOpacity(0.1),
+                      borderRadius: BorderRadius.circular(4),
+                    ),
+                    child: Text(
+                      _currentBranch,
+                      style: const TextStyle(
+                        color: Color(0xFF2196F3),
+                        fontWeight: FontWeight.w500,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
             ),
-            ListTile(
-              leading: const Icon(Icons.check_circle_outline),
-              title: const Text('Commit'),
-              onTap: git.isBusy ? null : () async => _openCommitDialog(git),
-            ),
-            ListTile(
-              leading: const Icon(Icons.upload),
-              title: const Text('Push'),
-              onTap: git.isBusy
-                  ? null
-                  : () async {
-                      final summary = await git.getPushSummary();
-                      if (!mounted) return;
-                      final confirm = await showDialog<bool>(
-                        context: context,
-                        builder: (context) => AlertDialog(
-                          title: const Text('Confirm push'),
-                          content: Text(
-                            'Push ${summary.aheadCount} commit(s) to ${summary.branch}?',
+            Expanded(
+              child: _isLoading
+                  ? const Center(child: CircularProgressIndicator())
+                  : ListView.builder(
+                      itemCount: _branches.length,
+                      itemBuilder: (context, index) {
+                        final branch = _branches[index];
+                        final isCurrent = branch == _currentBranch;
+                        return ListTile(
+                          leading: Icon(
+                            Icons.account_tree,
+                            color: isCurrent ? const Color(0xFF2196F3) : Colors.grey,
                           ),
-                          actions: [
-                            TextButton(onPressed: () => Navigator.of(context).pop(false), child: const Text('Cancel')),
-                            ElevatedButton(onPressed: () => Navigator.of(context).pop(true), child: const Text('Push')),
-                          ],
-                        ),
-                      );
-                      if (confirm != true) return;
-                      final result = await git.push();
-                      await _showResult(result);
-                    },
-            ),
-            const Divider(height: 24),
-            ListTile(
-              leading: Icon(_advancedOpen ? Icons.expand_less : Icons.expand_more),
-              title: const Text('Advanced'),
-              onTap: () => setState(() => _advancedOpen = !_advancedOpen),
-            ),
-            if (_advancedOpen) ...[
-              ListTile(
-                leading: const Icon(Icons.playlist_add),
-                title: const Text('Status'),
-                onTap: () async {
-                  final files = await git.status();
-                  if (!mounted) return;
-                  await showDialog<void>(
-                    context: context,
-                    builder: (context) => AlertDialog(
-                      title: const Text('Working tree status'),
-                      content: SizedBox(
-                        width: 320,
-                        child: ListView(
-                          shrinkWrap: true,
-                          children: files.map((file) => Text(file)).toList(),
-                        ),
-                      ),
-                    ),
-                  );
-                },
-              ),
-              ListTile(
-                leading: const Icon(Icons.history),
-                title: const Text('Log'),
-                onTap: () async {
-                  final commits = await git.log();
-                  if (!mounted) return;
-                  await showDialog<void>(
-                    context: context,
-                    builder: (context) => AlertDialog(
-                      title: const Text('Recent commits'),
-                      content: SizedBox(
-                        width: 320,
-                        child: ListView(
-                          shrinkWrap: true,
-                          children: commits
-                              .map(
-                                (commit) => ListTile(
-                                  title: Text(commit.message),
-                                  subtitle: Text('${commit.hash} • ${commit.date.toLocal()}'),
+                          title: Text(
+                            branch,
+                            style: TextStyle(
+                              color: isCurrent ? const Color(0xFF2196F3) : Colors.black87,
+                              fontWeight: isCurrent ? FontWeight.w500 : FontWeight.normal,
+                            ),
+                          ),
+                          trailing: isCurrent
+                              ? const Icon(Icons.check, color: Color(0xFF2196F3), size: 20)
+                              : IconButton(
+                                  icon: const Icon(Icons.more_vert, size: 20),
+                                  onPressed: () => _showBranchOptions(branch),
                                 ),
-                              )
-                              .toList(),
-                        ),
-                      ),
+                          onTap: isCurrent ? null : () => _switchBranch(branch),
+                          onLongPress: () => _showBranchOptions(branch),
+                        );
+                      },
                     ),
-                  );
-                },
-              ),
-              ListTile(
-                leading: const Icon(Icons.archive_outlined),
-                title: const Text('Stash'),
-                onTap: () async {
-                  final result = await git.stash();
-                  await _showResult(result);
-                },
-              ),
-              ListTile(
-                leading: const Icon(Icons.unarchive_outlined),
-                title: const Text('Stash Pop'),
-                onTap: () async {
-                  final result = await git.stashPop();
-                  await _showResult(result);
-                },
-              ),
-              ListTile(
-                leading: const Icon(Icons.call_split),
-                title: const Text('Checkout branch'),
-                onTap: () async {
-                  final controller = TextEditingController();
-                  if (!mounted) return;
-                  await showDialog<void>(
-                    context: context,
-                    builder: (context) => AlertDialog(
-                      title: const Text('Checkout branch'),
-                      content: TextField(
-                        controller: controller,
-                        decoration: const InputDecoration(labelText: 'Branch name'),
-                      ),
-                      actions: [
-                        TextButton(onPressed: () => Navigator.of(context).pop(), child: const Text('Cancel')),
-                        ElevatedButton(
-                          onPressed: () async {
-                            Navigator.of(context).pop();
-                            final result = await git.checkout(branch: controller.text.trim());
-                            await _showResult(result);
-                          },
-                          child: const Text('Checkout'),
-                        ),
-                      ],
-                    ),
-                  );
-                },
-              ),
-            ],
-            const Divider(height: 24),
-            ListTile(
-              leading: const Icon(Icons.settings),
-              title: const Text('Configure Git'),
-              onTap: () => _openConfigureDialog(settings),
             ),
           ],
         ),

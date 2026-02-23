@@ -58,6 +58,44 @@ class GitService extends ChangeNotifier {
     return _runOperation('checkout', body: {'branch': branch});
   }
 
+  Future<List<String>> getBranches() async {
+    final mock = await _settings.getGitMockMode();
+    if (mock) {
+      return ['main', 'dev', 'feature-xxx', 'master', 'release/v1.0'];
+    }
+    final response = await _post('/git/branches', body: {});
+    if (response.success) {
+      final data = jsonDecode(response.details ?? '[]') as List<dynamic>;
+      return data.map((item) => item.toString()).toList();
+    }
+    throw Exception(response.message);
+  }
+
+  Future<String> getCurrentBranch() async {
+    final mock = await _settings.getGitMockMode();
+    if (mock) {
+      return 'main';
+    }
+    final response = await _post('/git/current-branch', body: {});
+    if (response.success) {
+      final data = jsonDecode(response.details ?? '{}') as Map<String, dynamic>;
+      return data['branch'] as String? ?? 'main';
+    }
+    throw Exception(response.message);
+  }
+
+  Future<GitOperationResult> createBranch({required String name}) async {
+    return _runOperation('create-branch', body: {'name': name});
+  }
+
+  Future<GitOperationResult> deleteBranch({required String name}) async {
+    return _runOperation('delete-branch', body: {'name': name});
+  }
+
+  Future<GitOperationResult> mergeBranch({required String source, required String target}) async {
+    return _runOperation('merge', body: {'source': source, 'target': target});
+  }
+
   Future<List<GitCommit>> log() async {
     final mock = await _settings.getGitMockMode();
     if (mock) {
