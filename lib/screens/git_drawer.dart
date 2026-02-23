@@ -7,6 +7,8 @@ import '../mocks/git_data.dart';
 
 enum GitOpStatus { idle, loading, success, error }
 
+enum ProjectOpStatus { idle, running, stopped }
+
 class GitDrawer extends StatefulWidget {
   const GitDrawer({super.key});
 
@@ -21,6 +23,10 @@ class _GitDrawerState extends State<GitDrawer> {
   GitOpStatus _resetStatus = GitOpStatus.idle;
   GitOpStatus _stashStatus = GitOpStatus.idle;
   GitOpStatus _stashPopStatus = GitOpStatus.idle;
+
+  // Project running status
+  ProjectOpStatus _npmStartStatus = ProjectOpStatus.stopped;
+  ProjectOpStatus _npmInstallStatus = ProjectOpStatus.idle;
 
   String? _toastMessage;
   Color? _toastColor;
@@ -78,6 +84,42 @@ class _GitDrawerState extends State<GitDrawer> {
                     padding: const EdgeInsets.symmetric(horizontal: 12),
                     children: [
                       const SizedBox(height: 8),
+                      _buildSectionTitle('项目运行'),
+                      _buildProjectOpButton(
+                        icon: Icons.play_arrow_rounded,
+                        label: 'npm start',
+                        sublabel: '启动开发服务器',
+                        status: _npmStartStatus,
+                        accentColor: GitColors.success,
+                        isRunning: _npmStartStatus == ProjectOpStatus.running,
+                        onPress: () => _runProjectOp(
+                          ProjectOpStatus.running,
+                          '开发服务器已启动',
+                          setStatus: (s) => setState(() => _npmStartStatus = s),
+                        ),
+                        onStop: () => setState(() => _npmStartStatus = ProjectOpStatus.stopped),
+                      ),
+                      _buildProjectOpButton(
+                        icon: Icons.download_rounded,
+                        label: 'npm install',
+                        sublabel: '安装项目依赖',
+                        status: _npmInstallStatus,
+                        accentColor: GitColors.commit,
+                        onPress: () => _runProjectOp(
+                          ProjectOpStatus.idle,
+                          '依赖安装完成',
+                          setStatus: (s) => setState(() => _npmInstallStatus = s),
+                        ),
+                      ),
+                      _buildProjectOpButton(
+                        icon: Icons.stop_rounded,
+                        label: 'Stop',
+                        sublabel: '停止所有运行中的服务',
+                        status: ProjectOpStatus.stopped,
+                        accentColor: GitColors.error,
+                        onPress: () => _showToast('已停止所有服务', color: GitColors.warning),
+                      ),
+                      const SizedBox(height: 16),
                       _buildSectionTitle('同步'),
                       _buildGitOpButton(
                         icon: Icons.download_rounded,
@@ -345,6 +387,137 @@ class _GitDrawerState extends State<GitDrawer> {
       case GitOpStatus.error:
         return Icon(Icons.warning_rounded, size: 16, color: GitColors.error);
     }
+  }
+
+  Widget _buildProjectOpButton({
+    required IconData icon,
+    required String label,
+    required String sublabel,
+    required ProjectOpStatus status,
+    required Color accentColor,
+    required VoidCallback onPress,
+    VoidCallback? onStop,
+    bool isRunning = false,
+  }) {
+    final isLoading = status == ProjectOpStatus.idle && !isRunning;
+
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 2),
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          borderRadius: BorderRadius.circular(12),
+          onTap: isLoading ? null : (isRunning ? onStop : onPress),
+          child: Opacity(
+            opacity: isLoading ? 0.6 : 1.0,
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: Row(
+                children: [
+                  Container(
+                    width: 40,
+                    height: 40,
+                    decoration: BoxDecoration(
+                      color: accentColor.withOpacity(0.12),
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                    child: Icon(icon, size: 20, color: accentColor),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          label,
+                          style: const TextStyle(
+                            fontSize: 15,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                        const SizedBox(height: 1),
+                        Text(
+                          sublabel,
+                          style: TextStyle(
+                            fontSize: 12,
+                            color: Colors.grey[600],
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  _buildProjectStatusIcon(status, isRunning: isRunning),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildProjectStatusIcon(ProjectOpStatus status, {bool isRunning = false}) {
+    if (isRunning) {
+      return Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Container(
+            width: 8,
+            height: 8,
+            decoration: BoxDecoration(
+              color: GitColors.success,
+              shape: BoxShape.circle,
+            ),
+          ),
+          const SizedBox(width: 6),
+          Text(
+            '运行中',
+            style: TextStyle(
+              fontSize: 12,
+              color: GitColors.success,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+        ],
+      );
+    }
+    switch (status) {
+      case ProjectOpStatus.idle:
+        return Icon(Icons.chevron_right, size: 18, color: Colors.grey[400]);
+      case ProjectOpStatus.running:
+        return SizedBox(
+          width: 16,
+          height: 16,
+          child: CircularProgressIndicator(
+            strokeWidth: 2,
+            color: GitColors.warning,
+          ),
+        );
+      case ProjectOpStatus.stopped:
+        return Icon(Icons.stop_circle_outlined, size: 16, color: Colors.grey[400]);
+    }
+  }
+
+  Future<void> _runProjectOp(
+    ProjectOpStatus successStatus,
+    String successMsg, {
+    int delay = 1500,
+    required Function(ProjectOpStatus) setStatus,
+  }) async {
+    HapticFeedback.mediumImpact();
+    setStatus(ProjectOpStatus.running);
+    await Future.delayed(Duration(milliseconds: delay));
+    setStatus(successStatus);
+    _showToast(successMsg);
+    Future.delayed(const Duration(milliseconds: 2500), () {
+      if (mounted && successStatus != ProjectOpStatus.running) {
+        setStatus(ProjectOpStatus.idle);
+      }
+    });
   }
 
   Widget _buildStatusCard(ThemeData theme, bool isDark) {
