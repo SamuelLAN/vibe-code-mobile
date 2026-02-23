@@ -276,38 +276,35 @@ class _ChatScreenState extends State<ChatScreen> {
           ),
         ],
       ),
-      body: AnimatedPadding(
-        duration: const Duration(milliseconds: 180),
-        padding: EdgeInsets.only(bottom: MediaQuery.of(context).viewInsets.bottom),
-        child: Column(
-          children: [
-            Expanded(
-              child: ListView.builder(
-                controller: _scrollController,
-                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-                itemCount: messages.length,
-                itemBuilder: (context, index) {
-                  final message = messages[index];
-                  return MessageBubble(
-                    message: message,
-                    onCopy: () {
-                      Clipboard.setData(ClipboardData(text: message.content));
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(content: Text('Message copied to clipboard.')),
-                      );
-                    },
-                    onRetry: message.role == MessageRole.assistant
-                        ? () => chat.retryLastUserMessage()
-                        : null,
-                  );
-                },
-              ),
+      body: Column(
+        children: [
+          Expanded(
+            child: ListView.builder(
+              controller: _scrollController,
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+              itemCount: messages.length,
+              itemBuilder: (context, index) {
+                final message = messages[index];
+                return MessageBubble(
+                  message: message,
+                  onCopy: () {
+                    Clipboard.setData(ClipboardData(text: message.content));
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(content: Text('Message copied to clipboard.')),
+                    );
+                  },
+                  onRetry: message.role == MessageRole.assistant
+                      ? () => chat.retryLastUserMessage()
+                      : null,
+                );
+              },
             ),
-            if (_pendingAttachments.isNotEmpty)
-              AttachmentTray(
-                attachments: _pendingAttachments,
-                onRemove: _removeAttachment,
-              ),
+          ),
+          if (_pendingAttachments.isNotEmpty)
+            AttachmentTray(
+              attachments: _pendingAttachments,
+              onRemove: _removeAttachment,
+            ),
           InputBar(
             mode: _inputMode,
             controller: _textController,
@@ -319,8 +316,7 @@ class _ChatScreenState extends State<ChatScreen> {
             onPickFiles: _pickFiles,
             onVoiceSend: _sendVoiceMessage,
           ),
-          ],
-        ),
+        ],
       ),
     );
   }

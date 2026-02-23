@@ -81,6 +81,79 @@ class _InputBarState extends State<InputBar> {
     return Stack(
       clipBehavior: Clip.none,
       children: [
+        Builder(
+          builder: (context) {
+            return SafeArea(
+              top: false,
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  border: Border(top: BorderSide(color: Colors.grey.withOpacity(0.2), width: 0.5)),
+                ),
+                child: Row(
+                  children: [
+                    IconButton(
+                      onPressed: widget.onPickMedia,
+                      icon: const Icon(Icons.camera_alt_outlined, size: 30, color: Colors.black87),
+                    ),
+                    Expanded(
+                      child: isVoice
+                          ? GestureDetector(
+                              onLongPressStart: _onLongPressStart,
+                              onLongPressMoveUpdate: _onLongPressMoveUpdate,
+                              onLongPressEnd: _onLongPressEnd,
+                              child: Container(
+                                height: 44,
+                                alignment: Alignment.center,
+                                decoration: BoxDecoration(
+                                  color: Colors.grey.withOpacity(0.1),
+                                  borderRadius: BorderRadius.circular(22),
+                                ),
+                                child: const Text(
+                                  '按住说话',
+                                  style: TextStyle(
+                                    fontSize: 17,
+                                    fontWeight: FontWeight.w500,
+                                    color: Colors.black,
+                                  ),
+                                ),
+                              ),
+                            )
+                          : Container(
+                              decoration: BoxDecoration(
+                                color: Colors.grey.withOpacity(0.1),
+                                borderRadius: BorderRadius.circular(22),
+                              ),
+                              child: TextField(
+                                controller: widget.controller,
+                                maxLines: 4,
+                                minLines: 1,
+                                style: const TextStyle(fontSize: 17),
+                                decoration: const InputDecoration(
+                                  hintText: '发消息...',
+                                  hintStyle: TextStyle(color: Colors.grey),
+                                  contentPadding: EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                                  isDense: true,
+                                  border: InputBorder.none,
+                                ),
+                              ),
+                            ),
+                    ),
+                    IconButton(
+                      onPressed: widget.onToggleMode,
+                      icon: Icon(isVoice ? Icons.keyboard_alt_outlined : Icons.mic_none_outlined, size: 30, color: Colors.black87),
+                    ),
+                    IconButton(
+                      onPressed: widget.onPickFiles,
+                      icon: const Icon(Icons.add_circle_outline, size: 30, color: Colors.black87),
+                    ),
+                  ],
+                ),
+              ),
+            );
+          },
+        ),
         if (_isRecording)
           Positioned(
             left: 0,
@@ -88,75 +161,6 @@ class _InputBarState extends State<InputBar> {
             bottom: 0,
             child: _buildRecordingOverlay(),
           ),
-        SafeArea(
-          top: false,
-          child: Container(
-            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
-            decoration: BoxDecoration(
-              color: Colors.white,
-              border: Border(top: BorderSide(color: Colors.grey.withOpacity(0.2), width: 0.5)),
-            ),
-            child: Row(
-              children: [
-                IconButton(
-                  onPressed: widget.onPickMedia,
-                  icon: const Icon(Icons.camera_alt_outlined, size: 30, color: Colors.black87),
-                ),
-                Expanded(
-                  child: isVoice
-                      ? GestureDetector(
-                          onLongPressStart: _onLongPressStart,
-                          onLongPressMoveUpdate: _onLongPressMoveUpdate,
-                          onLongPressEnd: _onLongPressEnd,
-                          child: Container(
-                            height: 44,
-                            alignment: Alignment.center,
-                            decoration: BoxDecoration(
-                              color: Colors.grey.withOpacity(0.1),
-                              borderRadius: BorderRadius.circular(22),
-                            ),
-                            child: const Text(
-                              '按住说话',
-                              style: TextStyle(
-                                fontSize: 17,
-                                fontWeight: FontWeight.w500,
-                                color: Colors.black,
-                              ),
-                            ),
-                          ),
-                        )
-                      : Container(
-                          decoration: BoxDecoration(
-                            color: Colors.grey.withOpacity(0.1),
-                            borderRadius: BorderRadius.circular(22),
-                          ),
-                          child: TextField(
-                            controller: widget.controller,
-                            maxLines: 4,
-                            minLines: 1,
-                            style: const TextStyle(fontSize: 17),
-                            decoration: const InputDecoration(
-                              hintText: '发消息...',
-                              hintStyle: TextStyle(color: Colors.grey),
-                              contentPadding: EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-                              isDense: true,
-                              border: InputBorder.none,
-                            ),
-                          ),
-                        ),
-                ),
-                IconButton(
-                  onPressed: widget.onToggleMode,
-                  icon: Icon(isVoice ? Icons.keyboard_alt_outlined : Icons.mic_none_outlined, size: 30, color: Colors.black87),
-                ),
-                IconButton(
-                  onPressed: widget.onPickFiles,
-                  icon: const Icon(Icons.add_circle_outline, size: 30, color: Colors.black87),
-                ),
-              ],
-            ),
-          ),
-        ),
       ],
     );
   }
