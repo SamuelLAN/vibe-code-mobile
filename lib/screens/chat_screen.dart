@@ -16,7 +16,7 @@ import '../widgets/attachment_tray.dart';
 import '../widgets/input_bar.dart';
 import '../widgets/message_bubble.dart';
 import 'chat_list_drawer.dart';
-import 'git_drawer.dart';
+import 'git_drawer/git_drawer.dart';
 
 class ChatScreen extends StatefulWidget {
   const ChatScreen({super.key});
