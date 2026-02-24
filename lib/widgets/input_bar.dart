@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
+import '../services/audio_recorder_service.dart';
 import 'waveform_indicator.dart';
 
 enum InputMode { voice, text }
@@ -17,9 +18,27 @@ class InputBar extends StatefulWidget {
     required this.onPickMedia,
     required this.onPickFiles,
     this.onVoiceSend,
+    this.onRecordingComplete,
     this.isFullscreen = false,
     this.onToggleFullscreen,
-  });
+  }) : _recorder = null;
+
+  const InputBar.withRecorder({
+    super.key,
+    required this.mode,
+    required this.controller,
+    required this.isGenerating,
+    required this.onSend,
+    required this.onStop,
+    required this.onToggleMode,
+    required this.onPickMedia,
+    required this.onPickFiles,
+    this.onVoiceSend,
+    required AudioRecorderService recorder,
+    this.onRecordingComplete,
+    this.isFullscreen = false,
+    this.onToggleFullscreen,
+  }) : _recorder = recorder;
 
   final InputMode mode;
   final TextEditingController controller;
@@ -30,8 +49,10 @@ class InputBar extends StatefulWidget {
   final VoidCallback onPickMedia;
   final VoidCallback onPickFiles;
   final VoidCallback? onVoiceSend;
+  final void Function(String filePath)? onRecordingComplete;
   final bool isFullscreen;
   final VoidCallback? onToggleFullscreen;
+  final AudioRecorderService? _recorder;
 
   @override
   State<InputBar> createState() => _InputBarState();
@@ -279,7 +300,11 @@ class _InputBarState extends State<InputBar> {
     );
   }
 
-  void _onPanStart(DragStartDetails details) {
+  void _onPanStart(DragStartDetails details) async {
+    // 如果有录音服务，开始录音
+    if (widget._recorder != null) {
+      await widget._recorder!.startRecording();
+    }
     setState(() {
       _isRecording = true;
       _isCancelling = false;
@@ -300,14 +325,29 @@ class _InputBarState extends State<InputBar> {
     _endRecording();
   }
 
-  void _endRecording() {
+  void _endRecording() async {
     if (!_isRecording) return;
-    
+
     if (!_isCancelling) {
-      if (widget.onVoiceSend != null) {
+      // 停止录音并获取文件路径
+      String? filePath;
+      if (widget._recorder != null) {
+        filePath = await widget._recorder!.stopRecording();
+      }
+
+      if (filePath != null && widget.onRecordingComplete != null) {
+        // 回调录音文件路径
+        widget.onRecordingComplete!(filePath);
+      } else if (widget.onVoiceSend != null) {
+        // 兼容旧的回调
         widget.onVoiceSend!();
       } else {
         widget.onSend();
+      }
+    } else {
+      // 取消录音
+      if (widget._recorder != null) {
+        await widget._recorder!.cancelRecording();
       }
     }
 

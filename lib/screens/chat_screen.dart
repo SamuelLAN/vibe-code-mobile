@@ -10,6 +10,7 @@ import 'package:provider/provider.dart';
 
 import '../models/attachment.dart';
 import '../models/message.dart';
+import '../services/audio_recorder_service.dart';
 import '../services/auth_service.dart';
 import '../services/chat_service.dart';
 import '../widgets/attachment_tray.dart';
@@ -30,6 +31,7 @@ class _ChatScreenState extends State<ChatScreen> {
   final ScrollController _scrollController = ScrollController();
   final List<Attachment> _pendingAttachments = [];
   final List<Attachment> _recentUploads = [];
+  final AudioRecorderService _audioRecorder = AudioRecorderService();
   InputMode _inputMode = InputMode.voice;
   bool _isFullscreenInput = false;
 
@@ -37,6 +39,7 @@ class _ChatScreenState extends State<ChatScreen> {
   void dispose() {
     _textController.dispose();
     _scrollController.dispose();
+    _audioRecorder.dispose();
     super.dispose();
   }
 
@@ -190,19 +193,51 @@ class _ChatScreenState extends State<ChatScreen> {
   }
 
   Future<void> _sendVoiceMessage() async {
+    // 让用户选择音频文件（兼容旧方式）
+    final result = await FilePicker.platform.pickFiles(
+      type: FileType.custom,
+      allowedExtensions: ['mp3', 'wav', 'm4a', 'flac', 'ogg', 'webm'],
+    );
+    
+    if (result == null || result.files.isEmpty || result.files.first.path == null) {
+      return;
+    }
+
+    final audioFile = File(result.files.first.path!);
+    final fileSize = await audioFile.length();
+    
+    // 检查文件大小 (25MB = 25 * 1024 * 1024)
+    if (fileSize > 25 * 1024 * 1024) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('音频文件不能超过 25MB')),
+      );
+      return;
+    }
+
     final chat = context.read<ChatService>();
     HapticFeedback.lightImpact();
 
-    final attachment = Attachment(
-      id: 'voice_${DateTime.now().millisecondsSinceEpoch}',
-      path: 'mock_voice.m4a',
-      name: 'Voice Message',
-      type: AttachmentType.voice,
-      mime: 'audio/m4a',
-      sizeBytes: 1024 * 10,
-    );
+    await chat.sendVoiceMessage(audioFile);
+    _scrollToBottom();
+  }
 
-    await chat.sendUserMessage('[Voice Message]', [attachment]);
+  /// 处理录音完成回调（从 InputBar 的按住说话触发）
+  Future<void> _onRecordingComplete(String filePath) async {
+    final audioFile = File(filePath);
+    final fileSize = await audioFile.length();
+    
+    // 检查文件大小
+    if (fileSize > 25 * 1024 * 1024) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('录音时间过长，请缩短录音')),
+      );
+      return;
+    }
+
+    final chat = context.read<ChatService>();
+    await chat.sendVoiceMessage(audioFile);
     _scrollToBottom();
   }
 
@@ -367,7 +402,7 @@ class _ChatScreenState extends State<ChatScreen> {
             ),
           if (_isFullscreenInput)
             Expanded(
-              child: InputBar(
+              child: InputBar.withRecorder(
                 mode: _inputMode,
                 controller: _textController,
                 isGenerating: chat.isGenerating,
@@ -377,6 +412,8 @@ class _ChatScreenState extends State<ChatScreen> {
                 onPickMedia: _showMediaPicker,
                 onPickFiles: _pickFiles,
                 onVoiceSend: _sendVoiceMessage,
+                recorder: _audioRecorder,
+                onRecordingComplete: _onRecordingComplete,
                 isFullscreen: true,
                 onToggleFullscreen: () {
                   setState(() {
@@ -386,7 +423,7 @@ class _ChatScreenState extends State<ChatScreen> {
               ),
             )
           else
-            InputBar(
+            InputBar.withRecorder(
               mode: _inputMode,
               controller: _textController,
               isGenerating: chat.isGenerating,
@@ -396,6 +433,8 @@ class _ChatScreenState extends State<ChatScreen> {
               onPickMedia: _showMediaPicker,
               onPickFiles: _pickFiles,
               onVoiceSend: _sendVoiceMessage,
+              recorder: _audioRecorder,
+              onRecordingComplete: _onRecordingComplete,
               isFullscreen: false,
               onToggleFullscreen: () {
                 setState(() {

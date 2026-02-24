@@ -26,7 +26,10 @@ class VibeCodingApp extends StatelessWidget {
       providers: [
         Provider(create: (_) => SettingsService()),
         ChangeNotifierProvider(create: (_) => AuthService()),
-        ChangeNotifierProvider(create: (_) => ChatService()),
+        ChangeNotifierProxyProvider<AuthService, ChatService>(
+          create: (context) => ChatService(authService: context.read<AuthService>()),
+          update: (context, auth, previous) => previous ?? ChatService(authService: auth),
+        ),
         ChangeNotifierProxyProvider<SettingsService, GitService>(
           create: (context) => GitService(settings: context.read<SettingsService>()),
           update: (context, settings, previous) => previous ?? GitService(settings: settings),

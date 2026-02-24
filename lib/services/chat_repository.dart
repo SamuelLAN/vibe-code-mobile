@@ -102,4 +102,14 @@ class ChatRepository {
     _messages.putIfAbsent(message.chatId, () => []);
     _messages[message.chatId]!.add(message);
   }
+
+  Future<void> updateMessage(Message message) async {
+    final messages = _messages[message.chatId];
+    if (messages == null) return;
+    
+    final index = messages.indexWhere((m) => m.id == message.id);
+    if (index != -1) {
+      messages[index] = message;
+    }
+  }
 }

@@ -655,26 +655,7 @@ class _AttachmentRow extends StatelessWidget {
         itemBuilder: (context, index) {
           final attachment = attachments[index];
           if (attachment.type == AttachmentType.voice) {
-            return Container(
-              width: 120,
-              height: 48,
-              decoration: BoxDecoration(
-                color: Theme.of(context).colorScheme.primary.withValues(alpha: 0.1),
-                borderRadius: BorderRadius.circular(24),
-              ),
-              child: Row(
-                children: [
-                  const SizedBox(width: 8),
-                  const Icon(Icons.volume_up, size: 20),
-                  const SizedBox(width: 8),
-                  const Expanded(
-                    child: Text('Voice message', style: TextStyle(fontSize: 12)),
-                  ),
-                  const Text("0:02", style: TextStyle(fontSize: 10)),
-                  const SizedBox(width: 12),
-                ],
-              ),
-            );
+            return _VoiceMessageWidget(attachment: attachment);
           }
           return GestureDetector(
             onTap: attachment.type == AttachmentType.image
@@ -718,5 +699,94 @@ class _AttachmentRow extends StatelessWidget {
         },
       ),
     );
+  }
+}
+
+/// 语音消息组件，显示转录状态
+class _VoiceMessageWidget extends StatelessWidget {
+  const _VoiceMessageWidget({required this.attachment});
+
+  final Attachment attachment;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: 160,
+      height: 48,
+      decoration: BoxDecoration(
+        color: _getBackgroundColor(context),
+        borderRadius: BorderRadius.circular(24),
+      ),
+      child: Row(
+        children: [
+          const SizedBox(width: 8),
+          _buildStatusIcon(context),
+          const SizedBox(width: 8),
+          Expanded(
+            child: _buildStatusText(context),
+          ),
+          const SizedBox(width: 8),
+        ],
+      ),
+    );
+  }
+
+  Color _getBackgroundColor(BuildContext context) {
+    switch (attachment.transcriptionStatus) {
+      case TranscriptionStatus.loading:
+        return Theme.of(context).colorScheme.primary.withValues(alpha: 0.2);
+      case TranscriptionStatus.completed:
+        return Colors.green.withValues(alpha: 0.15);
+      case TranscriptionStatus.error:
+        return Colors.red.withValues(alpha: 0.15);
+      default:
+        return Theme.of(context).colorScheme.primary.withValues(alpha: 0.1);
+    }
+  }
+
+  Widget _buildStatusIcon(BuildContext context) {
+    switch (attachment.transcriptionStatus) {
+      case TranscriptionStatus.loading:
+        return SizedBox(
+          width: 16,
+          height: 16,
+          child: CircularProgressIndicator(
+            strokeWidth: 2,
+            color: Theme.of(context).colorScheme.primary,
+          ),
+        );
+      case TranscriptionStatus.completed:
+        return const Icon(Icons.check_circle, size: 20, color: Colors.green);
+      case TranscriptionStatus.error:
+        return const Icon(Icons.error, size: 20, color: Colors.red);
+      default:
+        return const Icon(Icons.volume_up, size: 20);
+    }
+  }
+
+  Widget _buildStatusText(BuildContext context) {
+    final textStyle = TextStyle(
+      fontSize: 12,
+      color: Theme.of(context).colorScheme.onSurface,
+    );
+
+    switch (attachment.transcriptionStatus) {
+      case TranscriptionStatus.loading:
+        return Text('转录中...', style: textStyle);
+      case TranscriptionStatus.completed:
+        return Text(
+          attachment.transcribedText ?? '转录完成',
+          style: textStyle,
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+        );
+      case TranscriptionStatus.error:
+        return Text(
+          '转录失败',
+          style: textStyle.copyWith(color: Colors.red),
+        );
+      default:
+        return Text('语音消息', style: textStyle);
+    }
   }
 }
