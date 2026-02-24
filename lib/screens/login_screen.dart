@@ -12,13 +12,13 @@ class LoginScreen extends StatefulWidget {
 
 class _LoginScreenState extends State<LoginScreen> {
   final _formKey = GlobalKey<FormState>();
-  final TextEditingController _usernameController = TextEditingController();
+  final TextEditingController _emailController = TextEditingController();
   final TextEditingController _passwordController = TextEditingController();
   bool _obscure = true;
 
   @override
   void dispose() {
-    _usernameController.dispose();
+    _emailController.dispose();
     _passwordController.dispose();
     super.dispose();
   }
@@ -26,10 +26,18 @@ class _LoginScreenState extends State<LoginScreen> {
   Future<void> _submit() async {
     if (!_formKey.currentState!.validate()) return;
     final auth = context.read<AuthService>();
-    await auth.login(
-      username: _usernameController.text,
+    final success = await auth.login(
+      email: _emailController.text.trim(),
       password: _passwordController.text,
     );
+    if (!success && mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(auth.error ?? '登录失败'),
+          backgroundColor: Theme.of(context).colorScheme.error,
+        ),
+      );
+    }
   }
 
   @override
@@ -85,15 +93,25 @@ class _LoginScreenState extends State<LoginScreen> {
                         ),
                         const SizedBox(height: 32),
                         TextFormField(
-                          controller: _usernameController,
+                          controller: _emailController,
                           textInputAction: TextInputAction.next,
+                          keyboardType: TextInputType.emailAddress,
+                          autocorrect: false,
                           decoration: const InputDecoration(
-                            labelText: 'Username',
-                            hintText: 'Enter your username',
-                            prefixIcon: Icon(Icons.person_outline),
+                            labelText: 'Email',
+                            hintText: 'Enter your email',
+                            prefixIcon: Icon(Icons.email_outlined),
                           ),
-                          validator: (value) =>
-                              value == null || value.trim().isEmpty ? 'Username is required' : null,
+                          validator: (value) {
+                            if (value == null || value.trim().isEmpty) {
+                              return 'Email is required';
+                            }
+                            final emailRegex = RegExp(r'^[\w-\.]+@([\w-]+\.)+[\w-]{2,}$');
+                            if (!emailRegex.hasMatch(value.trim())) {
+                              return 'Please enter a valid email';
+                            }
+                            return null;
+                          },
                         ),
                         const SizedBox(height: 16),
                         TextFormField(
@@ -113,14 +131,6 @@ class _LoginScreenState extends State<LoginScreen> {
                           onFieldSubmitted: (_) => _submit(),
                         ),
                         const SizedBox(height: 16),
-                        if (auth.error != null)
-                          Padding(
-                            padding: const EdgeInsets.only(bottom: 12),
-                            child: Text(
-                              auth.error!,
-                              style: TextStyle(color: Theme.of(context).colorScheme.error),
-                            ),
-                          ),
                         ElevatedButton(
                           onPressed: auth.isLoading ? null : _submit,
                           style: ElevatedButton.styleFrom(
