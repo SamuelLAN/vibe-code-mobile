@@ -168,6 +168,8 @@ class ChatService extends ChangeNotifier {
 
     // 调用转写 API
     final transcribedText = StringBuffer();
+    bool isTranscribeComplete = false;
+    String? transcribeError;
     
     try {
       await _transcribeClient.transcribeStream(
@@ -184,20 +186,34 @@ class ChatService extends ChangeNotifier {
               }
               break;
             case TranscribeEventType.complete:
+              // 输出转写文本到 console
+              final finalText = transcribedText.toString();
+              debugPrint('===== 语音转写结果 =====');
+              debugPrint(finalText);
+              debugPrint('=========================');
               _updateAttachmentStatus(
                 attachment, 
                 TranscriptionStatus.completed, 
-                transcribedText.toString(),
+                finalText,
               );
               // 更新消息内容为转写文本
-              _updateMessageContent(messageId, transcribedText.toString());
+              _updateMessageContent(messageId, finalText);
+              isTranscribeComplete = true;
               break;
             case TranscribeEventType.error:
+              debugPrint('转写错误: ${event.error}');
+              transcribeError = event.error;
               _updateAttachmentStatus(attachment, TranscriptionStatus.error, event.error);
               break;
           }
         },
       );
+      
+      // 转写完成后，调用 AI 回复接口
+      final finalText = transcribedText.toString();
+      if (isTranscribeComplete && finalText.isNotEmpty) {
+        await _generateAssistantResponse(finalText);
+      }
     } catch (e) {
       _updateAttachmentStatus(attachment, TranscriptionStatus.error, e.toString());
       notifyListeners();

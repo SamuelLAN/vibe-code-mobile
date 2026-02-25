@@ -104,7 +104,8 @@ class AuthService extends ChangeNotifier {
       return false;
     } catch (e) {
       _isLoading = false;
-      _error = '网络错误，请检查网络连接';
+      debugPrint('Login exception: $e');
+      _error = '网络错误: $e';
       notifyListeners();
       return false;
     }

@@ -1,5 +1,6 @@
 import 'dart:io';
 
+import 'package:flutter/foundation.dart';
 import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
 import 'package:permission_handler/permission_handler.dart';
@@ -32,11 +33,18 @@ class AudioRecorderService {
   Future<String?> startRecording() async {
     if (_isRecording) return _currentFilePath;
 
+    debugPrint('开始录音...');
+
     // 检查权限
     if (!await hasPermission()) {
+      debugPrint('请求麦克风权限...');
       final granted = await requestPermission();
-      if (!granted) return null;
+      if (!granted) {
+        debugPrint('麦克风权限被拒绝');
+        return null;
+      }
     }
+    debugPrint('麦克风权限已获取');
 
     // 创建录音文件路径
     final dir = await getApplicationDocumentsDirectory();
@@ -48,18 +56,26 @@ class AudioRecorderService {
     final timestamp = DateTime.now().millisecondsSinceEpoch;
     _currentFilePath = p.join(voiceDir.path, 'voice_$timestamp.m4a');
 
-    // 开始录音
-    await _recorder.start(
-      const RecordConfig(
-        encoder: AudioEncoder.aacLc,
-        bitRate: 128000,
-        sampleRate: 44100,
-      ),
-      path: _currentFilePath!,
-    );
+    debugPrint('录音文件路径: $_currentFilePath');
 
-    _isRecording = true;
-    return _currentFilePath;
+    // 开始录音
+    try {
+      await _recorder.start(
+        const RecordConfig(
+          encoder: AudioEncoder.aacLc,
+          bitRate: 128000,
+          sampleRate: 44100,
+        ),
+        path: _currentFilePath!,
+      );
+
+      _isRecording = true;
+      debugPrint('录音已开始');
+      return _currentFilePath;
+    } catch (e) {
+      debugPrint('开始录音失败: $e');
+      return null;
+    }
   }
 
   /// 停止录音
@@ -67,10 +83,12 @@ class AudioRecorderService {
   Future<String?> stopRecording() async {
     if (!_isRecording) return null;
 
+    debugPrint('停止录音...');
     final path = await _recorder.stop();
     _isRecording = false;
 
     final resultPath = path ?? _currentFilePath;
+    debugPrint('录音文件路径: $resultPath');
     _currentFilePath = null;
     
     return resultPath;

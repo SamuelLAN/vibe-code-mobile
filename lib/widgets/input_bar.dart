@@ -332,12 +332,19 @@ class _InputBarState extends State<InputBar> {
       // 停止录音并获取文件路径
       String? filePath;
       if (widget._recorder != null) {
-        filePath = await widget._recorder!.stopRecording();
+        try {
+          filePath = await widget._recorder!.stopRecording();
+        } catch (e) {
+          debugPrint('停止录音失败: $e');
+        }
       }
 
       if (filePath != null && widget.onRecordingComplete != null) {
         // 回调录音文件路径
         widget.onRecordingComplete!(filePath);
+      } else if (filePath == null) {
+        // 录音失败，不做操作（不触发文件选择）
+        debugPrint('录音失败或文件路径为空');
       } else if (widget.onVoiceSend != null) {
         // 兼容旧的回调
         widget.onVoiceSend!();

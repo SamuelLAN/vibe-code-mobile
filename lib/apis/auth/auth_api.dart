@@ -1,5 +1,6 @@
 import 'dart:convert';
 
+import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 
 import '../../config/api_config.dart';
@@ -120,6 +121,8 @@ class ApiException implements Exception {
     String message = 'Unknown error';
     int? code;
 
+    debugPrint('API Error Response: ${response.statusCode} - ${response.body}');
+
     try {
       final body = jsonDecode(response.body) as Map<String, dynamic>;
       message = body['msg'] as String? ?? message;
@@ -152,11 +155,18 @@ class AuthApiClient {
   String get _baseUrl => ApiConfig.authBaseUrl;
 
   Future<LoginResponse> login(LoginRequest request) async {
+    final url = '$_baseUrl/auth/login';
+    debugPrint('Login request to: $url');
+    debugPrint('Login request body: ${request.toJson()}');
+
     final response = await _client.post(
-      Uri.parse('$_baseUrl/auth/login'),
+      Uri.parse(url),
       headers: {'Content-Type': 'application/json'},
       body: jsonEncode(request.toJson()),
     );
+
+    debugPrint('Login response status: ${response.statusCode}');
+    debugPrint('Login response body: ${response.body}');
 
     if (response.statusCode == 200) {
       return LoginResponse.fromJson(

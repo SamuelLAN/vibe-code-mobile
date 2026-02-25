@@ -68,8 +68,7 @@ class ChatRepository {
   };
 
   Future<void> init() async {
-    // 模拟异步初始化
-    await Future.delayed(const Duration(milliseconds: 100));
+    // 同步初始化，无需异步操作
   }
 
   Future<List<Chat>> getChats() async {

@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:google_fonts/google_fonts.dart';
 import 'package:provider/provider.dart';
 
 import 'screens/chat_screen.dart';
@@ -19,9 +18,7 @@ class VibeCodingApp extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final baseTextTheme = GoogleFonts.manropeTextTheme();
-    final displayTextTheme = GoogleFonts.soraTextTheme();
-
+    // 使用系统默认字体，无需网络下载
     return MultiProvider(
       providers: [
         Provider(create: (_) => SettingsService()),
@@ -47,7 +44,6 @@ class VibeCodingApp extends StatelessWidget {
             onSurface: Color(0xFF0F172A),
             error: Color(0xFFB42318),
           ),
-          textTheme: baseTextTheme.merge(displayTextTheme),
           scaffoldBackgroundColor: const Color(0xFFF6F7FB),
           appBarTheme: const AppBarTheme(
             backgroundColor: Color(0xFFF6F7FB),
@@ -64,10 +60,6 @@ class VibeCodingApp extends StatelessWidget {
             onSurface: Color(0xFFE2E8F0),
             error: Color(0xFFF97066),
           ),
-          textTheme: baseTextTheme.merge(displayTextTheme).apply(
-                bodyColor: const Color(0xFFE2E8F0),
-                displayColor: const Color(0xFFE2E8F0),
-              ),
           scaffoldBackgroundColor: const Color(0xFF0B1120),
           appBarTheme: const AppBarTheme(
             backgroundColor: Color(0xFF0B1120),
@@ -89,7 +81,8 @@ class AuthGate extends StatefulWidget {
 }
 
 class _AuthGateState extends State<AuthGate> {
-  bool _ready = false;
+  bool _authReady = false;
+  bool _chatReady = false;
 
   @override
   void initState() {
@@ -98,22 +91,71 @@ class _AuthGateState extends State<AuthGate> {
   }
 
   Future<void> _bootstrap() async {
+    // 并行初始化认证和聊天服务
     final auth = context.read<AuthService>();
-    await auth.tryAutoLogin();
+    final chatService = context.read<ChatService>();
+
+    // 同时启动两个初始化任务
+    await Future.wait([
+      auth.tryAutoLogin(),
+      chatService.initialize(),
+    ]);
+
     if (!mounted) return;
+
     setState(() {
-      _ready = true;
+      _authReady = true;
+      _chatReady = true;
     });
-    await context.read<ChatService>().initialize();
   }
 
   @override
   Widget build(BuildContext context) {
     final auth = context.watch<AuthService>();
 
-    if (!_ready) {
-      return const Scaffold(
-        body: Center(child: CircularProgressIndicator()),
+    // 显示骨架屏直到服务准备就绪
+    if (!_authReady || !_chatReady) {
+      return Scaffold(
+        backgroundColor: Theme.of(context).scaffoldBackgroundColor,
+        body: Center(
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              // Logo 或应用图标
+              Container(
+                width: 80,
+                height: 80,
+                decoration: BoxDecoration(
+                  color: Theme.of(context).colorScheme.primary.withOpacity(0.1),
+                  borderRadius: BorderRadius.circular(20),
+                ),
+                child: Icon(
+                  Icons.rocket_launch_rounded,
+                  size: 40,
+                  color: Theme.of(context).colorScheme.primary,
+                ),
+              ),
+              const SizedBox(height: 24),
+              // 应用名称
+              Text(
+                'Vibe Coding',
+                style: Theme.of(context).textTheme.headlineSmall?.copyWith(
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+              const SizedBox(height: 32),
+              // 加载指示器
+              SizedBox(
+                width: 24,
+                height: 24,
+                child: CircularProgressIndicator(
+                  strokeWidth: 2,
+                  color: Theme.of(context).colorScheme.primary,
+                ),
+              ),
+            ],
+          ),
+        ),
       );
     }
 

@@ -46,10 +46,8 @@ class TokenManager extends ChangeNotifier {
   })  : _apiClient = apiClient,
         _store = store ?? const SecureStore();
 
-  static const _accessTokenKey = 'access_token';
-  static const _refreshTokenKey = 'refresh_token';
-  static const _tokenExpiresAtKey = 'token_expires_at';
-  static const _tokenCreatedAtKey = 'token_created_at';
+  // 使用单个键存储所有 token 信息（JSON 格式），减少 I/O 操作
+  static const _tokenDataKey = 'token_data';
 
   final AuthApiClient _apiClient;
   final KeyValueStore _store;
@@ -67,44 +65,68 @@ class TokenManager extends ChangeNotifier {
   String? get accessToken => _tokenInfo?.accessToken;
 
   /// 初始化 token 管理器
-  /// 从存储中恢复 token 信息
+  /// 从存储中恢复 token 信息（单次 I/O）
   Future<void> initialize() async {
-    final accessToken = await _store.read(_accessTokenKey);
-    final refreshToken = await _store.read(_refreshTokenKey);
-    final expiresAtStr = await _store.read(_tokenExpiresAtKey);
-    final createdAtStr = await _store.read(_tokenCreatedAtKey);
+    // 一次性读取所有 token 数据
+    final tokenDataJson = await _store.read(_tokenDataKey);
 
-    if (accessToken != null &&
-        refreshToken != null &&
-        expiresAtStr != null &&
-        createdAtStr != null) {
-      _tokenInfo = TokenInfo(
-        accessToken: accessToken,
-        refreshToken: refreshToken,
-        expiresAt: DateTime.parse(expiresAtStr),
-        createdAt: DateTime.parse(createdAtStr),
-      );
-      _scheduleRefresh();
+    if (tokenDataJson != null) {
+      try {
+        // 解析 JSON 数据
+        final data = _parseTokenData(tokenDataJson);
+        if (data != null) {
+          _tokenInfo = TokenInfo(
+            accessToken: data['accessToken']!,
+            refreshToken: data['refreshToken']!,
+            expiresAt: DateTime.parse(data['expiresAt']!),
+            createdAt: DateTime.parse(data['createdAt']!),
+          );
+          _scheduleRefresh();
+        }
+      } catch (e) {
+        // 数据解析失败，清除损坏的数据
+        await _clearTokenInfo();
+        debugPrint('Token data corrupted, cleared: $e');
+      }
     }
 
     _isInitialized = true;
     notifyListeners();
   }
 
-  /// 保存 token 信息到存储
+  Map<String, String>? _parseTokenData(String json) {
+    // 简单解析 key=value&key=value 格式
+    final result = <String, String>{};
+    final pairs = json.split('&');
+    for (final pair in pairs) {
+      final idx = pair.indexOf('=');
+      if (idx > 0) {
+        final key = pair.substring(0, idx);
+        final value = pair.substring(idx + 1);
+        result[key] = Uri.decodeComponent(value);
+      }
+    }
+    if (result.length >= 4) {
+      return result;
+    }
+    return null;
+  }
+
+  String _encodeTokenData(TokenInfo info) {
+    return 'accessToken=${Uri.encodeComponent(info.accessToken)}'
+        '&refreshToken=${Uri.encodeComponent(info.refreshToken)}'
+        '&expiresAt=${Uri.encodeComponent(info.expiresAt.toIso8601String())}'
+        '&createdAt=${Uri.encodeComponent(info.createdAt.toIso8601String())}';
+  }
+
+  /// 保存 token 信息到存储（单次 I/O）
   Future<void> _saveTokenInfo(TokenInfo info) async {
-    await _store.write(_accessTokenKey, info.accessToken);
-    await _store.write(_refreshTokenKey, info.refreshToken);
-    await _store.write(_tokenExpiresAtKey, info.expiresAt.toIso8601String());
-    await _store.write(_tokenCreatedAtKey, info.createdAt.toIso8601String());
+    await _store.write(_tokenDataKey, _encodeTokenData(info));
   }
 
   /// 清除 token 信息
   Future<void> _clearTokenInfo() async {
-    await _store.delete(_accessTokenKey);
-    await _store.delete(_refreshTokenKey);
-    await _store.delete(_tokenExpiresAtKey);
-    await _store.delete(_tokenCreatedAtKey);
+    await _store.delete(_tokenDataKey);
   }
 
   /// 设置新的 token 信息
