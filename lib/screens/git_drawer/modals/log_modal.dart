@@ -1,18 +1,20 @@
 import 'package:flutter/material.dart';
 
-import '../../../../mocks/git_data.dart';
+import '../../../../models/git_models.dart';
 
 class LogModal extends StatefulWidget {
-  const LogModal({super.key});
+  const LogModal({super.key, required this.commits});
+
+  final List<GitCommit> commits;
 
   @override
   State<LogModal> createState() => _LogModalState();
 }
 
 class _LogModalState extends State<LogModal> with SingleTickerProviderStateMixin {
-  late AnimationController _controller;
-  late Animation<Offset> _slideAnimation;
-  late Animation<double> _fadeAnimation;
+  late final AnimationController _controller;
+  late final Animation<Offset> _slideAnimation;
+  late final Animation<double> _fadeAnimation;
 
   @override
   void initState() {
@@ -24,17 +26,11 @@ class _LogModalState extends State<LogModal> with SingleTickerProviderStateMixin
     _slideAnimation = Tween<Offset>(
       begin: const Offset(0, 1),
       end: Offset.zero,
-    ).animate(CurvedAnimation(
-      parent: _controller,
-      curve: Curves.easeOutCubic,
-    ));
+    ).animate(CurvedAnimation(parent: _controller, curve: Curves.easeOutCubic));
     _fadeAnimation = Tween<double>(
       begin: 0,
       end: 1,
-    ).animate(CurvedAnimation(
-      parent: _controller,
-      curve: Curves.easeOut,
-    ));
+    ).animate(CurvedAnimation(parent: _controller, curve: Curves.easeOut));
     _controller.forward();
   }
 
@@ -47,16 +43,14 @@ class _LogModalState extends State<LogModal> with SingleTickerProviderStateMixin
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
+    final commits = widget.commits;
 
     return AnimatedBuilder(
       animation: _controller,
       builder: (context, child) {
         return FractionalTranslation(
           translation: _slideAnimation.value,
-          child: FadeTransition(
-            opacity: _fadeAnimation,
-            child: child,
-          ),
+          child: FadeTransition(opacity: _fadeAnimation, child: child),
         );
       },
       child: Container(
@@ -97,83 +91,93 @@ class _LogModalState extends State<LogModal> with SingleTickerProviderStateMixin
                   ],
                 ),
               ),
-              Expanded(
-                child: ListView.builder(
-                  padding: const EdgeInsets.all(20),
-                  itemCount: mockCommits.length,
-                  itemBuilder: (context, index) {
-                    final commit = mockCommits[index];
-                    final isLast = index == mockCommits.length - 1;
-                    return IntrinsicHeight(
-                      child: Row(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Column(
-                            children: [
-                              Container(
-                                width: 10,
-                                height: 10,
-                                decoration: BoxDecoration(
-                                  color: index == 0
-                                      ? Theme.of(context).colorScheme.primary
-                                      : Colors.grey[400],
-                                  shape: BoxShape.circle,
-                                ),
-                              ),
-                              if (!isLast)
-                                Expanded(
-                                  child: Container(
-                                    width: 2,
-                                    color: Colors.grey[300],
+              if (commits.isEmpty)
+                Expanded(
+                  child: Center(
+                    child: Text('暂无提交记录', style: TextStyle(color: Colors.grey[600])),
+                  ),
+                )
+              else
+                Expanded(
+                  child: ListView.builder(
+                    padding: const EdgeInsets.all(20),
+                    itemCount: commits.length,
+                    itemBuilder: (context, index) {
+                      final commit = commits[index];
+                      final isLast = index == commits.length - 1;
+                      return IntrinsicHeight(
+                        child: Row(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Column(
+                              children: [
+                                Container(
+                                  width: 10,
+                                  height: 10,
+                                  decoration: BoxDecoration(
+                                    color: index == 0
+                                        ? Theme.of(context).colorScheme.primary
+                                        : Colors.grey[400],
+                                    shape: BoxShape.circle,
                                   ),
                                 ),
-                            ],
-                          ),
-                          const SizedBox(width: 12),
-                          Expanded(
-                            child: Padding(
-                              padding: EdgeInsets.only(bottom: isLast ? 0 : 16),
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Text(
-                                    commit.shortHash,
-                                    style: TextStyle(
-                                      fontSize: 12,
-                                      fontFamily: 'monospace',
-                                      color: Theme.of(context).colorScheme.primary,
-                                    ),
+                                if (!isLast)
+                                  Expanded(
+                                    child: Container(width: 2, color: Colors.grey[300]),
                                   ),
-                                  const SizedBox(height: 4),
-                                  Text(
-                                    commit.message,
-                                    style: TextStyle(
-                                      fontSize: 14,
-                                      color: isDark ? Colors.white : Colors.black87,
+                              ],
+                            ),
+                            const SizedBox(width: 12),
+                            Expanded(
+                              child: Padding(
+                                padding: EdgeInsets.only(bottom: isLast ? 0 : 16),
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text(
+                                      commit.shortHash,
+                                      style: TextStyle(
+                                        fontSize: 12,
+                                        fontFamily: 'monospace',
+                                        color: Theme.of(context).colorScheme.primary,
+                                      ),
                                     ),
-                                  ),
-                                  const SizedBox(height: 4),
-                                  Text(
-                                    '${commit.author} · ${commit.date}',
-                                    style: TextStyle(
-                                      fontSize: 11,
-                                      color: Colors.grey[500],
+                                    const SizedBox(height: 4),
+                                    Text(
+                                      commit.message,
+                                      style: TextStyle(
+                                        fontSize: 14,
+                                        color: isDark ? Colors.white : Colors.black87,
+                                      ),
                                     ),
-                                  ),
-                                ],
+                                    const SizedBox(height: 4),
+                                    Text(
+                                      '${commit.author ?? 'unknown'} · ${_formatDate(commit.date)}',
+                                      style: TextStyle(fontSize: 11, color: Colors.grey[500]),
+                                    ),
+                                  ],
+                                ),
                               ),
                             ),
-                          ),
-                        ],
-                      ),
-                    );
-                  },
+                          ],
+                        ),
+                      );
+                    },
+                  ),
                 ),
-              ),
             ],
           ),
         ),
       ),
     );
+  }
+
+  String _formatDate(DateTime date) {
+    final now = DateTime.now();
+    final diff = now.difference(date);
+    if (diff.inMinutes < 1) return 'just now';
+    if (diff.inHours < 1) return '${diff.inMinutes} 分钟前';
+    if (diff.inDays < 1) return '${diff.inHours} 小时前';
+    return '${diff.inDays} 天前';
   }
 }

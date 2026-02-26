@@ -9,17 +9,15 @@ class SettingsService {
   static const _gitBaseUrlKey = 'git_base_url';
   static const _gitRepoPathKey = 'git_repo_path';
   static const _gitTokenKey = 'git_token';
-  static const _gitMockModeKey = 'git_mock_mode';
 
   Future<String?> getGitBaseUrl() => _store.read(_gitBaseUrlKey);
   Future<String?> getGitRepoPath() => _store.read(_gitRepoPathKey);
   Future<String?> getGitToken() => _store.read(_gitTokenKey);
-  Future<bool> getGitMockMode() async =>
-      (await _store.read(_gitMockModeKey)) != 'false';
+  // Git mock mode is permanently disabled. All git actions must use real APIs.
+  Future<bool> getGitMockMode() async => false;
 
   Future<void> setGitBaseUrl(String value) => _store.write(_gitBaseUrlKey, value.trim());
   Future<void> setGitRepoPath(String value) => _store.write(_gitRepoPathKey, value.trim());
   Future<void> setGitToken(String value) => _store.write(_gitTokenKey, value.trim());
-  Future<void> setGitMockMode(bool enabled) =>
-      _store.write(_gitMockModeKey, enabled ? 'true' : 'false');
+  Future<void> setGitMockMode(bool enabled) async {}
 }

@@ -62,7 +62,12 @@ class InputBar extends StatefulWidget {
 class _InputBarState extends State<InputBar> {
   bool _isRecording = false;
   bool _isCancelling = false;
+  bool _isStartingRecording = false;
+  bool _isPointerHoldingVoice = false;
+  bool _recorderStarted = false;
   double _dragY = 0;
+  double? _voicePointerStartY;
+  int _recordingAttemptId = 0;
   bool _isFocused = false;
   final FocusNode _focusNode = FocusNode();
   static const double _cancelThreshold = 100.0;
@@ -172,10 +177,12 @@ class _InputBarState extends State<InputBar> {
                     ),
                     Expanded(
                       child: isVoice
-                          ? GestureDetector(
-                              onPanStart: _onPanStart,
-                              onPanUpdate: _onPanUpdate,
-                              onPanEnd: _onPanEnd,
+                          ? Listener(
+                              behavior: HitTestBehavior.opaque,
+                              onPointerDown: _onVoicePointerDown,
+                              onPointerMove: _onVoicePointerMove,
+                              onPointerUp: _onVoicePointerUp,
+                              onPointerCancel: _onVoicePointerCancel,
                               child: Container(
                                 height: 44,
                                 alignment: Alignment.center,
@@ -326,14 +333,62 @@ class _InputBarState extends State<InputBar> {
     );
   }
 
-  void _onPanStart(DragStartDetails details) async {
+  void _onVoicePointerDown(PointerDownEvent event) {
+    if (_isRecording || _isStartingRecording) return;
+
+    _voicePointerStartY = event.position.dy;
+    _isPointerHoldingVoice = true;
+    _startVoiceRecording();
+  }
+
+  void _onVoicePointerMove(PointerMoveEvent event) {
+    if (!_isRecording) return;
+
+    final startY = _voicePointerStartY ?? event.position.dy;
+    final dragY = startY - event.position.dy;
+    setState(() {
+      _dragY = dragY;
+      _isCancelling = _dragY > _cancelThreshold;
+    });
+  }
+
+  void _onVoicePointerUp(PointerUpEvent event) {
+    _voicePointerStartY = null;
+    _endRecording();
+  }
+
+  void _onVoicePointerCancel(PointerCancelEvent event) {
+    _voicePointerStartY = null;
+    if (_isRecording) {
+      setState(() {
+        _isCancelling = true;
+      });
+    }
+    _endRecording();
+  }
+
+  void _startVoiceRecording() async {
+    final attemptId = ++_recordingAttemptId;
+
+    setState(() {
+      _isRecording = true;
+      _isStartingRecording = true;
+      _recorderStarted = false;
+      _isCancelling = false;
+      _dragY = 0;
+    });
+    HapticFeedback.mediumImpact();
+
     // 如果有录音服务，先请求麦克风权限
     if (widget._recorder != null) {
       final permissionService = PermissionService();
       final hasPermission =
           await permissionService.requestMicrophonePermission();
 
+      if (!mounted || attemptId != _recordingAttemptId) return;
+
       if (!hasPermission) {
+        _isPointerHoldingVoice = false;
         // 权限被拒绝，提示用户
         if (mounted) {
           final shouldOpenSettings = await showDialog<bool>(
@@ -358,14 +413,26 @@ class _InputBarState extends State<InputBar> {
             await permissionService.openSettings();
           }
         }
+        if (mounted && attemptId == _recordingAttemptId) {
+          setState(() {
+            _isRecording = false;
+            _isStartingRecording = false;
+            _recorderStarted = false;
+            _isCancelling = false;
+            _dragY = 0;
+          });
+        }
         return;
       }
 
       // 开始录音
       final filePath = await widget._recorder!.startRecording();
 
+      if (!mounted || attemptId != _recordingAttemptId) return;
+
       // 如果录音失败（可能是模拟器或其他问题）
       if (filePath == null) {
+        _isPointerHoldingVoice = false;
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(
@@ -373,37 +440,43 @@ class _InputBarState extends State<InputBar> {
               duration: Duration(seconds: 3),
             ),
           );
+          setState(() {
+            _isRecording = false;
+            _isStartingRecording = false;
+            _recorderStarted = false;
+            _isCancelling = false;
+            _dragY = 0;
+          });
         }
         return;
       }
     }
-    setState(() {
-      _isRecording = true;
-      _isCancelling = false;
-      _dragY = 0;
-    });
-    HapticFeedback.mediumImpact();
-  }
 
-  void _onPanUpdate(DragUpdateDetails details) {
-    if (!_isRecording) return;
-    setState(() {
-      _dragY = -details.localPosition.dy;
-      _isCancelling = _dragY > _cancelThreshold;
-    });
-  }
+    if (!mounted || attemptId != _recordingAttemptId) return;
 
-  void _onPanEnd(DragEndDetails details) {
-    _endRecording();
+    setState(() {
+      _isStartingRecording = false;
+      _recorderStarted = true;
+    });
+
+    // 用户在录音真正开始前已经松手，启动完成后立即结束/取消。
+    if (!_isPointerHoldingVoice) {
+      _endRecording();
+    }
   }
 
   void _endRecording() async {
     if (!_isRecording) return;
+    _isPointerHoldingVoice = false;
+
+    if (_isStartingRecording) {
+      return;
+    }
 
     if (!_isCancelling) {
       // 停止录音并获取文件路径
       String? filePath;
-      if (widget._recorder != null) {
+      if (widget._recorder != null && _recorderStarted) {
         try {
           filePath = await widget._recorder!.stopRecording();
         } catch (e) {
@@ -440,7 +513,10 @@ class _InputBarState extends State<InputBar> {
 
     setState(() {
       _isRecording = false;
+      _isStartingRecording = false;
+      _recorderStarted = false;
       _isCancelling = false;
+      _dragY = 0;
     });
     HapticFeedback.lightImpact();
   }

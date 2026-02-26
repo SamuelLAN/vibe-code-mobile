@@ -113,62 +113,103 @@ class TranscribeApiClient {
     debugPrint('[TranscribeApi] 开始发送转写请求...');
 
     try {
-      final streamedResponse = await _client.send(request);
-      final response = await http.Response.fromStream(streamedResponse);
-
+      final response = await _client.send(request);
       debugPrint('[TranscribeApi] 收到响应, statusCode: ${response.statusCode}');
       if (response.statusCode != 200) {
-        debugPrint('[TranscribeApi] 响应 body: ${response.body}');
+        final errorResponse = await http.Response.fromStream(response);
+        debugPrint('[TranscribeApi] 响应 body: ${errorResponse.body}');
+        onEvent(TranscribeEvent(
+          type: TranscribeEventType.error,
+          error: 'HTTP ${errorResponse.statusCode}: ${errorResponse.body}',
+        ));
+        return;
       }
 
-      // 解析 SSE 流
-      final lines = const LineSplitter().convert(response.body);
-      for (final line in lines) {
-        if (line.isEmpty) continue;
+      String? currentEvent;
+      final dataLines = <String>[];
+      var receivedAnyText = false;
+      var emittedComplete = false;
 
-        // SSE 格式: "event: xxx\ndata: yyy\n"
-        final trimmed = line.trim();
-        if (!trimmed.startsWith('data:')) continue;
+      void flushEvent() {
+        if (currentEvent == null && dataLines.isEmpty) return;
+        final eventName = (currentEvent ?? 'message').trim().toLowerCase();
+        final rawData = dataLines.join('\n');
+        final parsed = _parseTranscribeSseEvent(
+          eventName: eventName,
+          rawData: rawData,
+        );
 
-        final data = trimmed.substring(5).trim();
+        currentEvent = null;
+        dataLines.clear();
 
-        try {
-          final json = jsonDecode(data) as Map<String, dynamic>;
-          final code = json['code'] as int?;
+        if (parsed == null) return;
 
-          // 兼容 code: 0 和 code: 200 两种成功响应
-          if (code == 0 || code == 200) {
-            final text = json['data'] as String?;
-            final eventLogId = json['log_id'] as String?;
+        final textLength = parsed.text?.length ?? 0;
+        final rawPreview = rawData.length <= 160
+            ? rawData
+            : '${rawData.substring(0, 160)}...';
+        debugPrint(
+          '[TranscribeApi][SSE] event=$eventName complete=${parsed.isComplete} '
+          'textLen=$textLength error=${parsed.error ?? "-"} raw=$rawPreview',
+        );
 
-            if (text != null && text.isNotEmpty) {
-              onEvent(TranscribeEvent(
-                type: TranscribeEventType.data,
-                data: text,
-                logId: eventLogId,
-              ));
-            }
-
-            // 完成信号
-            onEvent(TranscribeEvent(
-              type: TranscribeEventType.complete,
-              data: text,
-              logId: eventLogId,
-            ));
-          } else {
-            final msg = json['msg'] as String? ?? 'Unknown error';
-            onEvent(TranscribeEvent(
-              type: TranscribeEventType.error,
-              error: msg,
-            ));
-          }
-        } catch (e) {
-          // 可能是纯文本响应
+        if (parsed.text != null && parsed.text!.isNotEmpty) {
+          receivedAnyText = true;
           onEvent(TranscribeEvent(
             type: TranscribeEventType.data,
-            data: data,
+            data: parsed.text,
+            logId: parsed.logId,
           ));
         }
+
+        if (parsed.error != null) {
+          onEvent(TranscribeEvent(
+            type: TranscribeEventType.error,
+            error: parsed.error,
+            logId: parsed.logId,
+          ));
+          return;
+        }
+
+        if (parsed.isComplete) {
+          emittedComplete = true;
+          onEvent(TranscribeEvent(
+            type: TranscribeEventType.complete,
+            data: parsed.text,
+            logId: parsed.logId,
+          ));
+        }
+      }
+
+      await response.stream
+          .transform(utf8.decoder)
+          .transform(const LineSplitter())
+          .forEach((line) {
+        if (line.isEmpty) {
+          flushEvent();
+          return;
+        }
+        if (line.startsWith('event:')) {
+          currentEvent = line.substring(6).trim();
+          return;
+        }
+        if (line.startsWith('data:')) {
+          var data = line.substring(5);
+          if (data.startsWith(' ')) {
+            data = data.substring(1);
+          }
+          dataLines.add(data);
+        }
+      });
+
+      flushEvent();
+
+      // 一些服务不会显式发送 complete 事件；若已经收到文本则在流结束时补发完成。
+      if (!emittedComplete && receivedAnyText) {
+        debugPrint(
+          '[TranscribeApi][SSE] stream ended without explicit complete; emit synthetic complete',
+        );
+        onEvent(TranscribeEvent(type: TranscribeEventType.complete));
       }
     } catch (e) {
       debugPrint('[TranscribeApi] 转写请求失败: $e');
@@ -177,6 +218,85 @@ class TranscribeApiClient {
         error: 'Request failed: $e',
       ));
     }
+  }
+
+  _ParsedTranscribeEvent? _parseTranscribeSseEvent({
+    required String eventName,
+    required String rawData,
+  }) {
+    if (rawData.isEmpty && eventName == 'message') {
+      return null;
+    }
+
+    if (rawData == '[DONE]') {
+      return const _ParsedTranscribeEvent(isComplete: true);
+    }
+
+    try {
+      final decoded = jsonDecode(rawData);
+      if (decoded is Map<String, dynamic>) {
+        final code = decoded['code'];
+        final logId = decoded['log_id']?.toString();
+        final msg = decoded['msg']?.toString();
+        final text = _extractText(decoded);
+        final isSuccessCode = code == 0 || code == 200 || code == null;
+        final done = decoded['done'] == true ||
+            decoded['is_done'] == true ||
+            decoded['completed'] == true ||
+            (decoded['status']?.toString().toLowerCase() == 'completed') ||
+            eventName == 'complete' ||
+            eventName == 'done' ||
+            eventName == 'finish' ||
+            eventName == 'finished';
+
+        if (!isSuccessCode) {
+          return _ParsedTranscribeEvent(
+            error: msg ?? 'Unknown error',
+            logId: logId,
+          );
+        }
+
+        return _ParsedTranscribeEvent(
+          text: text,
+          logId: logId,
+          isComplete: done,
+        );
+      }
+
+      if (decoded is String) {
+        final isComplete = eventName == 'complete' || decoded == '[DONE]';
+        return _ParsedTranscribeEvent(text: decoded, isComplete: isComplete);
+      }
+    } catch (_) {
+      // 非 JSON 文本事件，按纯文本处理
+    }
+
+    final isComplete = eventName == 'complete' ||
+        eventName == 'done' ||
+        eventName == 'finish' ||
+        rawData == '[DONE]';
+    return _ParsedTranscribeEvent(
+      text: rawData,
+      isComplete: isComplete,
+    );
+  }
+
+  String? _extractText(Map<String, dynamic> json) {
+    final direct = json['data'] ?? json['text'] ?? json['content'] ?? json['result'];
+    if (direct is String) return direct;
+    if (direct is Map<String, dynamic>) {
+      final nested = direct['text'] ??
+          direct['content'] ??
+          direct['transcript'] ??
+          direct['result'];
+      if (nested is String) return nested;
+      if (nested is Map<String, dynamic>) {
+        final nestedText =
+            nested['text'] ?? nested['content'] ?? nested['transcript'];
+        if (nestedText is String) return nestedText;
+      }
+    }
+    return null;
   }
 
   void dispose() {
@@ -202,4 +322,18 @@ class TranscribeApiClient {
         return 'audio/mpeg';
     }
   }
+}
+
+class _ParsedTranscribeEvent {
+  const _ParsedTranscribeEvent({
+    this.text,
+    this.error,
+    this.logId,
+    this.isComplete = false,
+  });
+
+  final String? text;
+  final String? error;
+  final String? logId;
+  final bool isComplete;
 }

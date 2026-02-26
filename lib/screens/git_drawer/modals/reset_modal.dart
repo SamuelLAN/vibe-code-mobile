@@ -1,12 +1,17 @@
 import 'package:flutter/material.dart';
 
 import '../../../../constants/colors.dart';
-import '../../../../mocks/git_data.dart';
+import '../../../../models/git_models.dart';
 
 class ResetModal extends StatefulWidget {
-  final Function(GitCommit commit, String type) onConfirm;
+  const ResetModal({
+    super.key,
+    required this.commits,
+    required this.onConfirm,
+  });
 
-  const ResetModal({super.key, required this.onConfirm});
+  final List<GitCommit> commits;
+  final void Function(GitCommit commit, String type) onConfirm;
 
   @override
   State<ResetModal> createState() => _ResetModalState();
@@ -77,18 +82,16 @@ class _ResetModalState extends State<ResetModal> {
                                 padding: const EdgeInsets.symmetric(vertical: 10),
                                 decoration: BoxDecoration(
                                   color: isSelected
-                                      ? t == 'hard'
+                                      ? (t == 'hard'
                                           ? GitColors.error.withOpacity(0.15)
-                                          : Theme.of(context).colorScheme.primary.withOpacity(0.15)
-                                      : isDark
-                                          ? Colors.white10
-                                          : Colors.grey[100],
+                                          : Theme.of(context).colorScheme.primary.withOpacity(0.15))
+                                      : (isDark ? Colors.white10 : Colors.grey[100]),
                                   borderRadius: BorderRadius.circular(8),
                                   border: Border.all(
                                     color: isSelected
-                                        ? t == 'hard'
+                                        ? (t == 'hard'
                                             ? GitColors.error
-                                            : Theme.of(context).colorScheme.primary
+                                            : Theme.of(context).colorScheme.primary)
                                         : Colors.grey[300]!,
                                   ),
                                 ),
@@ -99,9 +102,9 @@ class _ResetModalState extends State<ResetModal> {
                                       fontSize: 13,
                                       fontWeight: FontWeight.w600,
                                       color: isSelected
-                                          ? t == 'hard'
+                                          ? (t == 'hard'
                                               ? GitColors.error
-                                              : Theme.of(context).colorScheme.primary
+                                              : Theme.of(context).colorScheme.primary)
                                           : Colors.grey[600],
                                     ),
                                   ),
@@ -128,10 +131,7 @@ class _ResetModalState extends State<ResetModal> {
                             Expanded(
                               child: Text(
                                 '硬重置将丢弃所有未提交的更改！',
-                                style: TextStyle(
-                                  fontSize: 13,
-                                  color: GitColors.error,
-                                ),
+                                style: const TextStyle(fontSize: 13, color: GitColors.error),
                               ),
                             ),
                           ],
@@ -139,7 +139,12 @@ class _ResetModalState extends State<ResetModal> {
                       ),
                     ],
                     const SizedBox(height: 12),
-                    ...mockCommits.map((c) {
+                    if (widget.commits.isEmpty)
+                      Padding(
+                        padding: const EdgeInsets.symmetric(vertical: 12),
+                        child: Text('暂无可重置提交', style: TextStyle(color: Colors.grey[600])),
+                      ),
+                    ...widget.commits.map((c) {
                       final isSelected = _selected?.hash == c.hash;
                       return InkWell(
                         onTap: () => setState(() => _selected = c),
@@ -147,9 +152,7 @@ class _ResetModalState extends State<ResetModal> {
                           padding: const EdgeInsets.all(12),
                           margin: const EdgeInsets.only(bottom: 4),
                           decoration: BoxDecoration(
-                            color: isSelected
-                                ? Theme.of(context).colorScheme.primary.withOpacity(0.1)
-                                : null,
+                            color: isSelected ? Theme.of(context).colorScheme.primary.withOpacity(0.1) : null,
                             borderRadius: BorderRadius.circular(8),
                             border: Border.all(
                               color: isSelected
@@ -181,11 +184,8 @@ class _ResetModalState extends State<ResetModal> {
                                     ),
                                     const SizedBox(height: 2),
                                     Text(
-                                      c.date,
-                                      style: TextStyle(
-                                        fontSize: 11,
-                                        color: Colors.grey[500],
-                                      ),
+                                      _formatDate(c.date),
+                                      style: TextStyle(fontSize: 11, color: Colors.grey[500]),
                                     ),
                                   ],
                                 ),
@@ -204,20 +204,16 @@ class _ResetModalState extends State<ResetModal> {
                             _resetType == 'hard' ? GitColors.error : Theme.of(context).colorScheme.primary,
                         foregroundColor: Colors.white,
                         padding: const EdgeInsets.symmetric(vertical: 14),
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(12),
-                        ),
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                       ),
-                      onPressed: _selected != null
-                          ? () => widget.onConfirm(_selected!, _resetType)
-                          : null,
+                      onPressed: _selected != null ? () => widget.onConfirm(_selected!, _resetType) : null,
                       child: Row(
                         mainAxisAlignment: MainAxisAlignment.center,
                         children: [
                           const Icon(Icons.restore_rounded, size: 18),
                           const SizedBox(width: 8),
                           Text(_resetType == 'hard'
-                              ? '⚠ 硬重置'
+                              ? '硬重置'
                               : '${_resetType[0].toUpperCase()}${_resetType.substring(1)} 重置'),
                         ],
                       ),
@@ -230,5 +226,13 @@ class _ResetModalState extends State<ResetModal> {
         ),
       ),
     );
+  }
+
+  String _formatDate(DateTime date) {
+    final diff = DateTime.now().difference(date);
+    if (diff.inMinutes < 1) return '刚刚';
+    if (diff.inHours < 1) return '${diff.inMinutes} 分钟前';
+    if (diff.inDays < 1) return '${diff.inHours} 小时前';
+    return '${diff.inDays} 天前';
   }
 }

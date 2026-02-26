@@ -1,13 +1,21 @@
 import 'package:flutter/material.dart';
 
 import '../../../../constants/colors.dart';
-import '../../../../mocks/git_data.dart';
 import '../widgets/widgets.dart';
 
 class PushModal extends StatelessWidget {
-  final VoidCallback onConfirm;
+  const PushModal({
+    super.key,
+    required this.branch,
+    required this.remote,
+    required this.aheadCount,
+    required this.onConfirm,
+  });
 
-  const PushModal({super.key, required this.onConfirm});
+  final String branch;
+  final String remote;
+  final int aheadCount;
+  final VoidCallback onConfirm;
 
   @override
   Widget build(BuildContext context) {
@@ -18,7 +26,6 @@ class PushModal extends StatelessWidget {
         color: isDark ? const Color(0xFF1E1E1E) : Colors.white,
         borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
       ),
-      padding: EdgeInsets.only(bottom: MediaQuery.of(context).viewInsets.bottom),
       child: SafeArea(
         child: Column(
           mainAxisSize: MainAxisSize.min,
@@ -65,24 +72,34 @@ class PushModal extends StatelessWidget {
                     ),
                     child: Column(
                       children: [
-                        InfoRow(label: '分支', child: BranchBadge(branch: currentBranch)),
+                        InfoRow(label: '分支', child: BranchBadge(branch: branch)),
                         const SizedBox(height: 10),
                         InfoRow(
-                            label: '远程',
-                            child: Text('origin', style: TextStyle(color: isDark ? Colors.white : Colors.black87))),
+                          label: '远程',
+                          child: Text(
+                            remote,
+                            style: TextStyle(color: isDark ? Colors.white : Colors.black87),
+                          ),
+                        ),
                         const SizedBox(height: 10),
                         InfoRow(
                           label: '待推送',
-                          child: Text('↑ $commitsAhead',
-                              style: const TextStyle(
-                                  color: GitColors.success, fontWeight: FontWeight.w600)),
+                          child: Text(
+                            '↑ $aheadCount',
+                            style: const TextStyle(
+                              color: GitColors.success,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
                         ),
                       ],
                     ),
                   ),
                   const SizedBox(height: 14),
                   Text(
-                    '这将推送 $commitsAhead 个提交到 origin/$currentBranch。是否继续？',
+                    aheadCount > 0
+                        ? '这将推送 $aheadCount 个提交到 $remote/$branch。是否继续？'
+                        : '当前没有待推送提交。',
                     style: TextStyle(fontSize: 14, color: Colors.grey[600]),
                   ),
                   const SizedBox(height: 16),
@@ -91,17 +108,15 @@ class PushModal extends StatelessWidget {
                       backgroundColor: GitColors.push,
                       foregroundColor: Colors.white,
                       padding: const EdgeInsets.symmetric(vertical: 14),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(12),
-                      ),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                     ),
-                    onPressed: onConfirm,
+                    onPressed: aheadCount > 0 ? onConfirm : null,
                     child: Row(
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: [
                         const Icon(Icons.upload_rounded, size: 18),
                         const SizedBox(width: 8),
-                        Text('推送到 origin/$currentBranch'),
+                        Text('推送到 $remote/$branch'),
                       ],
                     ),
                   ),

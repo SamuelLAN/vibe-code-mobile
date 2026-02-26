@@ -1,13 +1,18 @@
 import 'package:flutter/material.dart';
 
 import '../../../../constants/colors.dart';
-import '../../../../mocks/git_data.dart';
+import '../../../../models/git_models.dart';
 import '../widgets/widgets.dart';
 
 class CommitModal extends StatefulWidget {
-  final Function(String message, List<GitFileChange> files) onConfirm;
+  const CommitModal({
+    super.key,
+    required this.files,
+    required this.onConfirm,
+  });
 
-  const CommitModal({super.key, required this.onConfirm});
+  final List<GitWorktreeFile> files;
+  final void Function(String message, List<String> filePaths, bool addAll) onConfirm;
 
   @override
   State<CommitModal> createState() => _CommitModalState();
@@ -16,13 +21,19 @@ class CommitModal extends StatefulWidget {
 class _CommitModalState extends State<CommitModal> {
   final _controller = TextEditingController();
   final _focusNode = FocusNode();
-  late List<GitFileChange> _files;
+  late List<_CommitSelectionFile> _files;
 
   @override
   void initState() {
     super.initState();
-    _files = mockFileChanges
-        .map((f) => GitFileChange(path: f.path, status: f.status, staged: f.staged))
+    _files = widget.files
+        .map(
+          (f) => _CommitSelectionFile(
+            path: f.path,
+            status: f.normalizedStatus,
+            staged: true,
+          ),
+        )
         .toList();
   }
 
@@ -35,34 +46,29 @@ class _CommitModalState extends State<CommitModal> {
 
   void _toggleStage(String path) {
     setState(() {
-      _files = _files.map((f) {
-        if (f.path == path) {
-          return GitFileChange(path: f.path, status: f.status, staged: !f.staged);
-        }
-        return f;
-      }).toList();
+      _files = _files
+          .map((f) => f.path == path ? f.copyWith(staged: !f.staged) : f)
+          .toList();
     });
   }
 
   void _stageAll() {
     setState(() {
-      _files = _files
-          .map((f) => GitFileChange(path: f.path, status: f.status, staged: true))
-          .toList();
+      _files = _files.map((f) => f.copyWith(staged: true)).toList();
     });
   }
 
   void _unstageAll() {
     setState(() {
-      _files = _files
-          .map((f) => GitFileChange(path: f.path, status: f.status, staged: false))
-          .toList();
+      _files = _files.map((f) => f.copyWith(staged: false)).toList();
     });
   }
 
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
+    final selectedCount = _files.where((f) => f.staged).length;
+    final canSubmit = _controller.text.trim().isNotEmpty && (selectedCount > 0 || _files.isNotEmpty);
 
     return GestureDetector(
       onTap: () => FocusScope.of(context).unfocus(),
@@ -116,6 +122,7 @@ class _CommitModalState extends State<CommitModal> {
                         focusNode: _focusNode,
                         maxLength: 72,
                         maxLines: 3,
+                        onChanged: (_) => setState(() {}),
                         style: TextStyle(color: isDark ? Colors.white : Colors.black87),
                         decoration: InputDecoration(
                           hintText: '提交信息...',
@@ -130,91 +137,42 @@ class _CommitModalState extends State<CommitModal> {
                         ),
                       ),
                       const SizedBox(height: 12),
-                      Row(
-                        children: [
-                          Expanded(
-                            child: ActionButton(label: '全部暂存', onTap: _stageAll),
-                          ),
-                          const SizedBox(width: 8),
-                          Expanded(
-                            child: ActionButton(label: '取消暂存', onTap: _unstageAll),
-                          ),
-                        ],
-                      ),
-                      const SizedBox(height: 12),
-                      ..._files.map((f) => InkWell(
-                            onTap: () => _toggleStage(f.path),
-                            child: Padding(
-                              padding: const EdgeInsets.symmetric(vertical: 10),
-                              child: Row(
-                                children: [
-                                  Container(
-                                    width: 20,
-                                    height: 20,
-                                    decoration: BoxDecoration(
-                                      color: f.staged
-                                          ? Theme.of(context).colorScheme.primary
-                                          : Colors.transparent,
-                                      borderRadius: BorderRadius.circular(5),
-                                      border: Border.all(
-                                        color: f.staged
-                                            ? Theme.of(context).colorScheme.primary
-                                            : Colors.grey[400]!,
-                                        width: 1.5,
-                                      ),
-                                    ),
-                                    child: f.staged
-                                        ? const Icon(Icons.check, size: 12, color: Colors.white)
-                                        : null,
-                                  ),
-                                  const SizedBox(width: 10),
-                                  Expanded(
-                                    child: Text(
-                                      f.path,
-                                      style: TextStyle(
-                                        fontSize: 13,
-                                        fontFamily: 'monospace',
-                                        color: isDark ? Colors.white : Colors.black87,
-                                      ),
-                                      overflow: TextOverflow.ellipsis,
-                                    ),
-                                  ),
-                                  Text(
-                                    f.status,
-                                    style: TextStyle(
-                                      fontSize: 11,
-                                      fontWeight: FontWeight.w700,
-                                      color: f.status == 'deleted'
-                                          ? GitColors.deleted
-                                          : f.status == 'added'
-                                              ? GitColors.added
-                                              : GitColors.modified,
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ),
-                          )),
+                      if (_files.isNotEmpty)
+                        Row(
+                          children: [
+                            Expanded(child: ActionButton(label: '全部暂存', onTap: _stageAll)),
+                            const SizedBox(width: 8),
+                            Expanded(child: ActionButton(label: '取消暂存', onTap: _unstageAll)),
+                          ],
+                        ),
+                      if (_files.isNotEmpty) const SizedBox(height: 12),
+                      if (_files.isEmpty)
+                        Padding(
+                          padding: const EdgeInsets.symmetric(vertical: 12),
+                          child: Text('当前没有可提交的变更文件', style: TextStyle(color: Colors.grey[600])),
+                        ),
+                      ..._files.map((f) => _buildFileRow(context, f, isDark)),
                       const SizedBox(height: 16),
                       ElevatedButton(
                         style: ElevatedButton.styleFrom(
                           backgroundColor: Theme.of(context).colorScheme.primary,
                           foregroundColor: Colors.white,
                           padding: const EdgeInsets.symmetric(vertical: 14),
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(12),
-                          ),
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                         ),
-                        onPressed: _controller.text.trim().isNotEmpty
+                        onPressed: canSubmit
                             ? () => widget.onConfirm(
-                                _controller.text.trim(), _files.where((f) => f.staged).toList())
+                                  _controller.text.trim(),
+                                  _files.where((f) => f.staged).map((f) => f.path).toList(),
+                                  selectedCount == _files.length && _files.isNotEmpty,
+                                )
                             : null,
                         child: Row(
                           mainAxisAlignment: MainAxisAlignment.center,
                           children: [
                             const Icon(Icons.commit_rounded, size: 18),
                             const SizedBox(width: 8),
-                            Text('提交 ${_files.where((f) => f.staged).length} 个文件'),
+                            Text(_files.isEmpty ? '提交' : '提交 $selectedCount 个文件'),
                           ],
                         ),
                       ),
@@ -226,6 +184,76 @@ class _CommitModalState extends State<CommitModal> {
           ),
         ),
       ),
+    );
+  }
+
+  Widget _buildFileRow(BuildContext context, _CommitSelectionFile f, bool isDark) {
+    return InkWell(
+      onTap: () => _toggleStage(f.path),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(vertical: 10),
+        child: Row(
+          children: [
+            Container(
+              width: 20,
+              height: 20,
+              decoration: BoxDecoration(
+                color: f.staged ? Theme.of(context).colorScheme.primary : Colors.transparent,
+                borderRadius: BorderRadius.circular(5),
+                border: Border.all(
+                  color: f.staged ? Theme.of(context).colorScheme.primary : Colors.grey[400]!,
+                  width: 1.5,
+                ),
+              ),
+              child: f.staged ? const Icon(Icons.check, size: 12, color: Colors.white) : null,
+            ),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Text(
+                f.path,
+                style: TextStyle(
+                  fontSize: 13,
+                  fontFamily: 'monospace',
+                  color: isDark ? Colors.white : Colors.black87,
+                ),
+                overflow: TextOverflow.ellipsis,
+              ),
+            ),
+            Text(
+              f.status,
+              style: TextStyle(
+                fontSize: 11,
+                fontWeight: FontWeight.w700,
+                color: switch (f.status) {
+                  'deleted' => GitColors.deleted,
+                  'added' => GitColors.added,
+                  _ => GitColors.modified,
+                },
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _CommitSelectionFile {
+  const _CommitSelectionFile({
+    required this.path,
+    required this.status,
+    required this.staged,
+  });
+
+  final String path;
+  final String status;
+  final bool staged;
+
+  _CommitSelectionFile copyWith({bool? staged}) {
+    return _CommitSelectionFile(
+      path: path,
+      status: status,
+      staged: staged ?? this.staged,
     );
   }
 }

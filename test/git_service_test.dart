@@ -5,15 +5,14 @@ import 'package:plutux_code/services/settings_service.dart';
 import 'support/in_memory_store.dart';
 
 void main() {
-  test('git service returns mock operations when enabled', () async {
+  test('git service requires backend config in real mode', () async {
     final store = InMemoryStore();
     final settings = SettingsService(store: store);
-    await settings.setGitMockMode(true);
 
     final git = GitService(settings: settings);
     final result = await git.pull();
 
-    expect(result.success, isTrue);
-    expect(result.message, contains('Mock'));
+    expect(result.success, isFalse);
+    expect(result.message, contains('configured'));
   });
 }

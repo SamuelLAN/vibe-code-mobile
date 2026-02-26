@@ -20,7 +20,7 @@ class ChatService extends ChangeNotifier {
     AuthService? authService,
     TranscribeApiClient? transcribeClient,
     CodingStreamApiClient? codingStreamClient,
-  })  : _repo = repository ?? ChatRepository(),
+  })  : _repo = repository ?? ChatRepository(authService: authService),
         _authService = authService,
         _transcribeClient = transcribeClient ?? TranscribeApiClient(),
         _codingStreamClient = codingStreamClient ?? CodingStreamApiClient();
@@ -61,8 +61,8 @@ class ChatService extends ChangeNotifier {
         createdAt: DateTime.now(),
         updatedAt: DateTime.now(),
       );
-      await _repo.createChat(chat);
-      _chats = [chat];
+      final createdChat = await _repo.createChat(chat);
+      _chats = [createdChat];
     }
     await selectChat(_chats.first.id);
   }
@@ -79,20 +79,30 @@ class ChatService extends ChangeNotifier {
 
   Future<void> selectChat(String chatId) async {
     _activeChat = _chats.firstWhere((chat) => chat.id == chatId);
+    final detail = await _repo.getChatDetail(chatId);
+    if (detail != null) {
+      final index = _chats.indexWhere((chat) => chat.id == chatId);
+      if (index != -1) {
+        detail.lastMessagePreview ??= _chats[index].lastMessagePreview;
+        _chats[index] = detail;
+      }
+      _activeChat = detail;
+    }
     _messages = await _repo.getMessages(chatId);
     notifyListeners();
   }
 
   Future<void> newChat() async {
-    final chat = Chat(
+    final draftChat = Chat(
       id: _uuid.v4(),
       title: 'New Chat',
       createdAt: DateTime.now(),
       updatedAt: DateTime.now(),
     );
-    await _repo.createChat(chat);
-    _chats.insert(0, chat);
-    await selectChat(chat.id);
+    final createdChat = await _repo.createChat(draftChat);
+    _chats.removeWhere((c) => c.id == createdChat.id);
+    _chats.insert(0, createdChat);
+    await selectChat(createdChat.id);
   }
 
   Future<void> deleteChat(String chatId) async {
@@ -600,6 +610,7 @@ class ChatService extends ChangeNotifier {
   void dispose() {
     _streamTimer?.cancel();
     _streamProcessors.clear();
+    _repo.dispose();
     _codingStreamClient.dispose();
     _transcribeClient.dispose();
     super.dispose();

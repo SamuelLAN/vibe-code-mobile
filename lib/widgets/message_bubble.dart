@@ -239,6 +239,10 @@ class _AssistantMessageContent extends StatelessWidget {
         isDark: isDark,
       );
     }
+    if (element.type == StreamElementType.insightStart ||
+        element.type == StreamElementType.insightEnd) {
+      return const SizedBox.shrink();
+    }
 
     if (codeFence == null) {
       return _EnhancedMarkdown(
@@ -287,62 +291,81 @@ class _FunctionTimelineBlockState extends State<_FunctionTimelineBlock> {
   @override
   Widget build(BuildContext context) {
     final summary = _buildSummary(widget.item);
-    final borderColor = Colors.blueGrey.withValues(alpha: 0.35);
-    final bgColor =
-        widget.isDark ? Colors.blueGrey[900]! : Colors.blueGrey[50]!;
-    final titleColor = widget.isDark ? Colors.grey[200] : Colors.blueGrey[800];
-    final subColor = widget.isDark ? Colors.grey[400] : Colors.blueGrey[600];
+    final titleColor = widget.isDark ? Colors.grey[500] : Colors.grey[700];
+    final subColor = widget.isDark ? Colors.grey[600] : Colors.grey[600];
+    final functionName = _functionNameOfItem(widget.item);
+    final isSearchFilesLoading =
+        functionName == 'search_files' && widget.item.functionResult == null;
+    final canExpand = !isSearchFilesLoading;
+    final showExpanded = canExpand && _expanded;
 
     return Container(
       width: double.infinity,
-      margin: const EdgeInsets.symmetric(vertical: 6),
-      decoration: BoxDecoration(
-        color: bgColor,
-        borderRadius: BorderRadius.circular(10),
-        border: Border.all(color: borderColor),
-      ),
+      margin: const EdgeInsets.symmetric(vertical: 4),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           InkWell(
-            borderRadius: BorderRadius.circular(10),
-            onTap: () => setState(() => _expanded = !_expanded),
+            borderRadius: BorderRadius.circular(6),
+            onTap:
+                canExpand ? () => setState(() => _expanded = !_expanded) : null,
             child: Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+              padding: const EdgeInsets.symmetric(horizontal: 2, vertical: 4),
               child: Row(
                 children: [
-                  Icon(
-                    _expanded ? Icons.expand_more : Icons.chevron_right,
-                    size: 18,
-                    color: subColor,
-                  ),
+                  if (canExpand)
+                    Icon(
+                      _expanded ? Icons.expand_more : Icons.chevron_right,
+                      size: 15,
+                      color: subColor,
+                    )
+                  else
+                    SizedBox(
+                      width: 15,
+                      height: 15,
+                      child: Padding(
+                        padding: const EdgeInsets.all(2),
+                        child: CircularProgressIndicator(
+                          strokeWidth: 1.4,
+                          color: subColor,
+                        ),
+                      ),
+                    ),
                   const SizedBox(width: 4),
-                  Icon(summary.icon, size: 15, color: subColor),
-                  const SizedBox(width: 8),
+                  Icon(summary.icon, size: 13, color: subColor),
+                  const SizedBox(width: 6),
                   Expanded(
                     child: Text(
                       summary.title,
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                       style: TextStyle(
-                        fontSize: 12,
-                        fontWeight: FontWeight.w600,
+                        fontSize: 11,
+                        fontWeight: FontWeight.w500,
                         color: titleColor,
                       ),
                     ),
                   ),
+                  if (isSearchFilesLoading)
+                    Text(
+                      'loading',
+                      style: TextStyle(
+                        fontSize: 10,
+                        color: subColor,
+                      ),
+                    ),
                 ],
               ),
             ),
           ),
-          if (_expanded) ...[
+          if (showExpanded) ...[
             if (summary.subtitle != null && summary.subtitle!.isNotEmpty)
               Padding(
-                padding: const EdgeInsets.fromLTRB(14, 0, 14, 8),
+                padding: const EdgeInsets.fromLTRB(22, 0, 8, 6),
                 child: Text(
                   summary.subtitle!,
                   style: TextStyle(
-                    fontSize: 11,
+                    fontSize: 10,
                     color: subColor,
                   ),
                   maxLines: 2,
@@ -350,13 +373,20 @@ class _FunctionTimelineBlockState extends State<_FunctionTimelineBlock> {
                 ),
               ),
             Padding(
-              padding: const EdgeInsets.fromLTRB(10, 0, 10, 10),
+              padding: const EdgeInsets.fromLTRB(20, 0, 0, 8),
               child: _buildExpandedContent(widget.item, widget.isDark),
             ),
           ],
         ],
       ),
     );
+  }
+
+  String _functionNameOfItem(_StreamRenderItem item) {
+    return (item.functionResult?.metadata?['functionName'] ??
+            item.functionCall?.metadata?['functionName'] ??
+            '')
+        .toString();
   }
 
   _FunctionSummary _buildSummary(_StreamRenderItem item) {
@@ -2710,6 +2740,121 @@ class _ThinkingToolBlockState extends State<_ThinkingToolBlock> {
         .toList();
     if (lines.isEmpty) return '';
     return lines.take(2).join(' ');
+  }
+}
+
+class _InsightBoundaryToolBlock extends StatefulWidget {
+  const _InsightBoundaryToolBlock({
+    required this.content,
+    required this.isStart,
+    required this.isDark,
+  });
+
+  final String content;
+  final bool isStart;
+  final bool isDark;
+
+  @override
+  State<_InsightBoundaryToolBlock> createState() =>
+      _InsightBoundaryToolBlockState();
+}
+
+class _InsightBoundaryToolBlockState extends State<_InsightBoundaryToolBlock> {
+  bool _expanded = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final parsed = _tryParseJson(widget.content);
+    final insightId = parsed?['insight_id']?.toString();
+    final borderColor = Colors.blueGrey.withValues(alpha: 0.35);
+    final bgColor =
+        widget.isDark ? Colors.blueGrey[900]! : Colors.blueGrey[50]!;
+    final titleColor = widget.isDark ? Colors.grey[200] : Colors.blueGrey[800];
+    final subColor = widget.isDark ? Colors.grey[400] : Colors.blueGrey[600];
+    final iconColor = widget.isStart ? Colors.green : Colors.orange;
+    final title = widget.isStart ? 'Insight start' : 'Insight end';
+
+    return Container(
+      width: double.infinity,
+      margin: const EdgeInsets.symmetric(vertical: 6),
+      decoration: BoxDecoration(
+        color: bgColor,
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: borderColor),
+      ),
+      child: Column(
+        children: [
+          InkWell(
+            onTap: () => setState(() => _expanded = !_expanded),
+            borderRadius: BorderRadius.circular(10),
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+              child: Row(
+                children: [
+                  Icon(
+                    _expanded ? Icons.expand_more : Icons.chevron_right,
+                    size: 18,
+                    color: subColor,
+                  ),
+                  const SizedBox(width: 4),
+                  Icon(Icons.lightbulb_outline, size: 15, color: iconColor),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      title,
+                      style: TextStyle(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w600,
+                        color: titleColor,
+                      ),
+                    ),
+                  ),
+                  if (insightId != null && insightId.isNotEmpty)
+                    Flexible(
+                      child: Text(
+                        insightId,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(
+                          fontSize: 10.5,
+                          color: subColor,
+                        ),
+                      ),
+                    ),
+                ],
+              ),
+            ),
+          ),
+          if (_expanded)
+            Padding(
+              padding: const EdgeInsets.fromLTRB(10, 0, 10, 10),
+              child: Container(
+                width: double.infinity,
+                padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(
+                  color: widget.isDark
+                      ? Colors.black.withValues(alpha: 0.22)
+                      : Colors.white,
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(
+                    color: Colors.white
+                        .withValues(alpha: widget.isDark ? 0.06 : 0.12),
+                  ),
+                ),
+                child: SelectableText(
+                  parsed != null ? _formatJsonDisplay(parsed) : widget.content,
+                  style: TextStyle(
+                    fontFamily: 'monospace',
+                    fontSize: 10.5,
+                    height: 1.35,
+                    color: widget.isDark ? Colors.grey[300] : Colors.grey[800],
+                  ),
+                ),
+              ),
+            ),
+        ],
+      ),
+    );
   }
 }
 
