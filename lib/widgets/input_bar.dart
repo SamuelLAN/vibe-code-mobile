@@ -105,17 +105,22 @@ class _InputBarState extends State<InputBar> {
   bool get _hasMultipleLines => _lineCount >= 2;
 
   Widget _buildSendButton() {
+    final isStopping = widget.isGenerating;
     return Container(
       width: 36,
       height: 36,
-      decoration: const BoxDecoration(
-        color: Color(0xFF2196F3),
+      decoration: BoxDecoration(
+        color: isStopping ? Colors.red : const Color(0xFF2196F3),
         shape: BoxShape.circle,
       ),
       child: IconButton(
-        onPressed: widget.onSend,
+        onPressed: isStopping ? widget.onStop : widget.onSend,
         padding: EdgeInsets.zero,
-        icon: const Icon(Icons.send, size: 20, color: Colors.white),
+        icon: Icon(
+          isStopping ? Icons.stop : Icons.send,
+          size: 20,
+          color: Colors.white,
+        ),
       ),
     );
   }
@@ -130,7 +135,8 @@ class _InputBarState extends State<InputBar> {
   Widget _buildCollapseButton() {
     return IconButton(
       onPressed: widget.onToggleFullscreen,
-      icon: const Icon(Icons.keyboard_arrow_down, size: 30, color: Colors.black87),
+      icon: const Icon(Icons.keyboard_arrow_down,
+          size: 30, color: Colors.black87),
     );
   }
 
@@ -153,13 +159,16 @@ class _InputBarState extends State<InputBar> {
                 padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
                 decoration: BoxDecoration(
                   color: Colors.white,
-                  border: Border(top: BorderSide(color: Colors.grey.withOpacity(0.2), width: 0.5)),
+                  border: Border(
+                      top: BorderSide(
+                          color: Colors.grey.withOpacity(0.2), width: 0.5)),
                 ),
                 child: Row(
                   children: [
                     IconButton(
                       onPressed: widget.onPickMedia,
-                      icon: const Icon(Icons.camera_alt_outlined, size: 30, color: Colors.black87),
+                      icon: const Icon(Icons.camera_alt_outlined,
+                          size: 30, color: Colors.black87),
                     ),
                     Expanded(
                       child: isVoice
@@ -198,33 +207,46 @@ class _InputBarState extends State<InputBar> {
                                 decoration: const InputDecoration(
                                   hintText: '发消息...',
                                   hintStyle: TextStyle(color: Colors.grey),
-                                  contentPadding: EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                                  contentPadding: EdgeInsets.symmetric(
+                                      horizontal: 16, vertical: 10),
                                   isDense: true,
                                   border: InputBorder.none,
                                 ),
                               ),
                             ),
                     ),
-                    if (_isFocused && _hasText) ...[
+                    if (widget.isGenerating || (_isFocused && _hasText)) ...[
                       _buildSendButton(),
                     ] else if (_hasMultipleLines) ...[
                       _buildFullscreenButton(),
                       IconButton(
                         onPressed: widget.onToggleMode,
-                        icon: Icon(isVoice ? Icons.keyboard_alt_outlined : Icons.mic_none_outlined, size: 30, color: Colors.black87),
+                        icon: Icon(
+                            isVoice
+                                ? Icons.keyboard_alt_outlined
+                                : Icons.mic_none_outlined,
+                            size: 30,
+                            color: Colors.black87),
                       ),
                       IconButton(
                         onPressed: widget.onPickFiles,
-                        icon: const Icon(Icons.add_circle_outline, size: 30, color: Colors.black87),
+                        icon: const Icon(Icons.add_circle_outline,
+                            size: 30, color: Colors.black87),
                       ),
                     ] else ...[
                       IconButton(
                         onPressed: widget.onToggleMode,
-                        icon: Icon(isVoice ? Icons.keyboard_alt_outlined : Icons.mic_none_outlined, size: 30, color: Colors.black87),
+                        icon: Icon(
+                            isVoice
+                                ? Icons.keyboard_alt_outlined
+                                : Icons.mic_none_outlined,
+                            size: 30,
+                            color: Colors.black87),
                       ),
                       IconButton(
                         onPressed: widget.onPickFiles,
-                        icon: const Icon(Icons.add_circle_outline, size: 30, color: Colors.black87),
+                        icon: const Icon(Icons.add_circle_outline,
+                            size: 30, color: Colors.black87),
                       ),
                     ],
                   ],
@@ -255,13 +277,16 @@ class _InputBarState extends State<InputBar> {
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
               decoration: BoxDecoration(
-                border: Border(bottom: BorderSide(color: Colors.grey.withOpacity(0.2), width: 0.5)),
+                border: Border(
+                    bottom: BorderSide(
+                        color: Colors.grey.withOpacity(0.2), width: 0.5)),
               ),
               child: Row(
                 children: [
                   IconButton(
                     onPressed: widget.onPickMedia,
-                    icon: const Icon(Icons.camera_alt_outlined, size: 30, color: Colors.black87),
+                    icon: const Icon(Icons.camera_alt_outlined,
+                        size: 30, color: Colors.black87),
                   ),
                   const Spacer(),
                   _buildCollapseButton(),
@@ -305,7 +330,8 @@ class _InputBarState extends State<InputBar> {
     // 如果有录音服务，先请求麦克风权限
     if (widget._recorder != null) {
       final permissionService = PermissionService();
-      final hasPermission = await permissionService.requestMicrophonePermission();
+      final hasPermission =
+          await permissionService.requestMicrophonePermission();
 
       if (!hasPermission) {
         // 权限被拒绝，提示用户
@@ -337,7 +363,7 @@ class _InputBarState extends State<InputBar> {
 
       // 开始录音
       final filePath = await widget._recorder!.startRecording();
-      
+
       // 如果录音失败（可能是模拟器或其他问题）
       if (filePath == null) {
         if (mounted) {

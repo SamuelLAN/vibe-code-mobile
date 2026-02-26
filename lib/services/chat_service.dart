@@ -4,6 +4,7 @@ import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:uuid/uuid.dart';
 
+import '../apis/vibe/coding_stream_api.dart';
 import '../apis/vibe/transcribe_api.dart';
 import '../models/attachment.dart';
 import '../models/chat.dart';
@@ -16,13 +17,16 @@ class ChatService extends ChangeNotifier {
     ChatRepository? repository,
     AuthService? authService,
     TranscribeApiClient? transcribeClient,
+    CodingStreamApiClient? codingStreamClient,
   })  : _repo = repository ?? ChatRepository(),
         _authService = authService,
-        _transcribeClient = transcribeClient ?? TranscribeApiClient();
+        _transcribeClient = transcribeClient ?? TranscribeApiClient(),
+        _codingStreamClient = codingStreamClient ?? CodingStreamApiClient();
 
   final ChatRepository _repo;
   final AuthService? _authService;
   final TranscribeApiClient _transcribeClient;
+  final CodingStreamApiClient _codingStreamClient;
   final Uuid _uuid = const Uuid();
 
   List<Chat> _chats = [];
@@ -31,6 +35,8 @@ class ChatService extends ChangeNotifier {
   bool _isGenerating = false;
   String? _error;
   Timer? _streamTimer;
+  String? _currentFlowId;
+  String? _activeGenerationId;
 
   List<Chat> get chats => _chats;
   Chat? get activeChat => _activeChat;
@@ -62,7 +68,8 @@ class ChatService extends ChangeNotifier {
     _chats = await _repo.getChats();
     if (_activeChat != null) {
       final activeId = _activeChat!.id;
-      _activeChat = _chats.firstWhere((chat) => chat.id == activeId, orElse: () => _chats.first);
+      _activeChat = _chats.firstWhere((chat) => chat.id == activeId,
+          orElse: () => _chats.first);
     }
     notifyListeners();
   }
@@ -106,7 +113,8 @@ class ChatService extends ChangeNotifier {
     await refreshChats();
   }
 
-  Future<void> sendUserMessage(String text, List<Attachment> attachments) async {
+  Future<void> sendUserMessage(
+      String text, List<Attachment> attachments) async {
     if (_activeChat == null) return;
     _error = null;
 
@@ -156,12 +164,15 @@ class ChatService extends ChangeNotifier {
 
     // 读取文件头验证格式（仅对 WAV 强制校验 RIFF）
     try {
-      final bytes = await audioFile.openRead(0, 12).fold<List<int>>(<int>[], (acc, chunk) {
+      final bytes = await audioFile.openRead(0, 12).fold<List<int>>(<int>[],
+          (acc, chunk) {
         if (acc.length >= 12) return acc;
         acc.addAll(chunk);
         return acc.length > 12 ? acc.sublist(0, 12) : acc;
       });
-      final ascii = bytes.map((b) => (b >= 32 && b <= 126) ? String.fromCharCode(b) : '.').join();
+      final ascii = bytes
+          .map((b) => (b >= 32 && b <= 126) ? String.fromCharCode(b) : '.')
+          .join();
       debugPrint('[ChatService] 文件签名(ascii): $ascii');
       if (fileExt == 'wav' && bytes.length >= 4) {
         final header = String.fromCharCodes(bytes.take(4));
@@ -178,7 +189,7 @@ class ChatService extends ChangeNotifier {
     }
 
     final messageId = _uuid.v4();
-    
+
     // 创建语音消息，初始状态为转录中
     final attachment = Attachment(
       id: 'voice_${DateTime.now().millisecondsSinceEpoch}',
@@ -198,7 +209,7 @@ class ChatService extends ChangeNotifier {
       createdAt: DateTime.now(),
       attachments: [attachment],
     );
-    
+
     await _repo.addMessage(userMessage);
     _messages.add(userMessage);
     notifyListeners();
@@ -214,8 +225,7 @@ class ChatService extends ChangeNotifier {
     // 调用转写 API
     final transcribedText = StringBuffer();
     bool isTranscribeComplete = false;
-    String? transcribeError;
-    
+
     try {
       await _transcribeClient.transcribeStream(
         audioFile: audioFile,
@@ -237,8 +247,8 @@ class ChatService extends ChangeNotifier {
               debugPrint(finalText);
               debugPrint('=========================');
               _updateAttachmentStatus(
-                attachment, 
-                TranscriptionStatus.completed, 
+                attachment,
+                TranscriptionStatus.completed,
                 finalText,
               );
               // 更新消息内容为转写文本
@@ -247,20 +257,21 @@ class ChatService extends ChangeNotifier {
               break;
             case TranscribeEventType.error:
               debugPrint('[ChatService] 转写错误: ${event.error}');
-              transcribeError = event.error;
-              _updateAttachmentStatus(attachment, TranscriptionStatus.error, event.error);
+              _updateAttachmentStatus(
+                  attachment, TranscriptionStatus.error, event.error);
               break;
           }
         },
       );
-      
+
       // 转写完成后，调用 AI 回复接口
       final finalText = transcribedText.toString();
       if (isTranscribeComplete && finalText.isNotEmpty) {
         await _generateAssistantResponse(finalText);
       }
     } catch (e) {
-      _updateAttachmentStatus(attachment, TranscriptionStatus.error, e.toString());
+      _updateAttachmentStatus(
+          attachment, TranscriptionStatus.error, e.toString());
       notifyListeners();
     }
   }
@@ -294,12 +305,13 @@ class ChatService extends ChangeNotifier {
     }
   }
 
-  void _updateAttachmentStatus(Attachment attachment, TranscriptionStatus status, String? text) {
+  void _updateAttachmentStatus(
+      Attachment attachment, TranscriptionStatus status, String? text) {
     attachment.transcriptionStatus = status;
     if (text != null) {
       attachment.transcribedText = text;
     }
-    
+
     // 找到对应的消息并更新
     final messageIndex = _messages.indexWhere(
       (m) => m.attachments.any((a) => a.id == attachment.id),
@@ -328,6 +340,8 @@ class ChatService extends ChangeNotifier {
 
   void stopGeneration() {
     _streamTimer?.cancel();
+    final stoppingGenerationId = _activeGenerationId;
+    _activeGenerationId = null;
     _isGenerating = false;
     final streaming = _messages.lastWhere(
       (msg) => msg.isStreaming,
@@ -342,23 +356,36 @@ class ChatService extends ChangeNotifier {
     );
     if (streaming.id.isNotEmpty) {
       streaming.isStreaming = false;
+      _repo.updateMessage(streaming);
     }
     notifyListeners();
+
+    final flowId = _currentFlowId;
+    _currentFlowId = null;
+    if (flowId != null && flowId.isNotEmpty && stoppingGenerationId != null) {
+      _stopRemoteGeneration(flowId, stoppingGenerationId);
+    }
   }
 
   Future<void> _updateChatMeta(String text) async {
     if (_activeChat == null) return;
     if (_activeChat!.title == 'New Chat') {
-      _activeChat!.title = text.length > 32 ? '${text.substring(0, 32)}…' : text;
+      _activeChat!.title =
+          text.length > 32 ? '${text.substring(0, 32)}…' : text;
     }
     _activeChat!.updatedAt = DateTime.now();
-    _activeChat!.lastMessagePreview = text.length > 60 ? '${text.substring(0, 60)}…' : text;
+    _activeChat!.lastMessagePreview =
+        text.length > 60 ? '${text.substring(0, 60)}…' : text;
     await _repo.updateChat(_activeChat!);
     await refreshChats();
   }
 
   Future<void> _generateAssistantResponse(String prompt) async {
     if (_activeChat == null) return;
+    if (_authService == null) {
+      await _generateMockAssistantResponse();
+      return;
+    }
 
     final assistantMessage = Message(
       id: _uuid.v4(),
@@ -374,10 +401,87 @@ class ChatService extends ChangeNotifier {
     _messages.add(assistantMessage);
 
     _isGenerating = true;
+    _currentFlowId = _uuid.v4();
+    final generationId = _uuid.v4();
+    _activeGenerationId = generationId;
     notifyListeners();
 
-    const response =
-        'Here\'s a focused plan for your request:\n\n'
+    final accessToken = await _authService.getValidToken();
+    if (accessToken == null) {
+      _finishAssistantStream(
+        assistantMessage: assistantMessage,
+        generationId: generationId,
+        error: '认证失败，请重新登录',
+      );
+      return;
+    }
+
+    await _codingStreamClient.startStream(
+      accessToken: accessToken,
+      msg: prompt,
+      mode: 'flash',
+      flowId: _currentFlowId,
+      onEvent: (event) {
+        if (_activeGenerationId != generationId) {
+          return;
+        }
+
+        if (event.flowId != null && event.flowId!.isNotEmpty) {
+          _currentFlowId = event.flowId;
+        }
+
+        switch (event.type) {
+          case CodingStreamEventType.message:
+            final chunk = event.text ?? event.rawData ?? '';
+            if (chunk.isEmpty) return;
+            assistantMessage.content += chunk;
+            _repo.updateMessage(assistantMessage);
+            notifyListeners();
+            break;
+          case CodingStreamEventType.completed:
+          case CodingStreamEventType.interrupted:
+            _finishAssistantStream(
+              assistantMessage: assistantMessage,
+              generationId: generationId,
+            );
+            break;
+          case CodingStreamEventType.error:
+            _finishAssistantStream(
+              assistantMessage: assistantMessage,
+              generationId: generationId,
+              error: event.error ?? event.text ?? '生成失败',
+            );
+            break;
+        }
+      },
+    );
+
+    if (_activeGenerationId == generationId) {
+      _finishAssistantStream(
+        assistantMessage: assistantMessage,
+        generationId: generationId,
+      );
+    }
+  }
+
+  Future<void> _generateMockAssistantResponse() async {
+    if (_activeChat == null) return;
+
+    final assistantMessage = Message(
+      id: _uuid.v4(),
+      chatId: _activeChat!.id,
+      role: MessageRole.assistant,
+      content: '',
+      createdAt: DateTime.now(),
+      attachments: [],
+      isStreaming: true,
+    );
+    await _repo.addMessage(assistantMessage);
+    _messages.add(assistantMessage);
+    _isGenerating = true;
+    notifyListeners();
+
+    const response = 'Here\'s a focused plan for your request:\n\n'
         '1. Clarify scope and success criteria.\n'
         '2. Sketch the UX flow and key screens.\n'
         '3. Define API contracts and Git operations.\n'
@@ -392,18 +496,62 @@ class ChatService extends ChangeNotifier {
         timer.cancel();
         assistantMessage.isStreaming = false;
         _isGenerating = false;
+        _repo.updateMessage(assistantMessage);
         notifyListeners();
         return;
       }
       assistantMessage.content += response[index];
       index += 1;
+      _repo.updateMessage(assistantMessage);
       notifyListeners();
     });
+  }
+
+  void _finishAssistantStream({
+    required Message assistantMessage,
+    required String generationId,
+    String? error,
+  }) {
+    if (_activeGenerationId != generationId) return;
+
+    if (error != null && error.isNotEmpty) {
+      _error = error;
+      if (assistantMessage.content.trim().isEmpty) {
+        assistantMessage.content = 'Error: $error';
+      }
+    }
+
+    assistantMessage.isStreaming = false;
+    _repo.updateMessage(assistantMessage);
+
+    _isGenerating = false;
+    _activeGenerationId = null;
+    _currentFlowId = null;
+    notifyListeners();
+  }
+
+  Future<void> _stopRemoteGeneration(String flowId, String generationId) async {
+    final accessToken = await _authService?.getValidToken();
+    if (accessToken == null) return;
+
+    try {
+      await _codingStreamClient.stopStream(
+        accessToken: accessToken,
+        flowId: flowId,
+      );
+    } catch (e) {
+      debugPrint('[ChatService] stopGeneration failed for $flowId: $e');
+      if (_activeGenerationId == null || _activeGenerationId == generationId) {
+        _error = '停止生成失败: $e';
+        notifyListeners();
+      }
+    }
   }
 
   @override
   void dispose() {
     _streamTimer?.cancel();
+    _codingStreamClient.dispose();
     _transcribeClient.dispose();
     super.dispose();
   }

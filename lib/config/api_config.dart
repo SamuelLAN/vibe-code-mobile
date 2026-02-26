@@ -11,8 +11,11 @@ class ApiConfig {
 
   /// 代码服务主机地址
   static String codeHost = const String.fromEnvironment(
-    'CODE_HOST',
-    defaultValue: 'http://192.168.1.52:8007',
+    'P_CODE_HOST',
+    defaultValue: String.fromEnvironment(
+      'CODE_HOST',
+      defaultValue: 'http://192.168.1.52:8007',
+    ),
   );
 
   /// 获取完整的认证 API 基础 URL
