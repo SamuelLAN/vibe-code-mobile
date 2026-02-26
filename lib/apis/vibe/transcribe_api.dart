@@ -40,12 +40,12 @@ class TranscribeApiClient {
 
   String get _baseUrl => ApiConfig.codeBaseUrl;
 
-  /// 流式转写音频
-  /// 
-  /// [audioFile] - 音频文件
-  /// [accessToken] - 访问令牌
-  /// [logId] - 可选的日志 ID
-  /// [onEvent] - 事件监听回调
+  /// æµå¼è½¬åé³é¢
+  ///
+  /// [audioFile] - é³é¢æä»¶
+  /// [accessToken] - è®¿é®ä»¤ç
+  /// [logId] - å¯éçæ¥å¿ ID
+  /// [onEvent] - äºä»¶çå¬åè°
   Future<void> transcribeStream({
     required File audioFile,
     required String accessToken,
@@ -54,46 +54,60 @@ class TranscribeApiClient {
   }) async {
     final uri = Uri.parse('$_baseUrl/vibe/transcribe/stream');
 
-    // 检查音频文件是否存在
+    // æ£æ¥é³é¢æä»¶æ¯å¦å­å¨
     if (!await audioFile.exists()) {
-      debugPrint('[TranscribeApi] 音频文件不存在: ${audioFile.path}');
+      debugPrint('[TranscribeApi] é³é¢æä»¶ä¸å­å¨: ${audioFile.path}');
       onEvent(TranscribeEvent(
         type: TranscribeEventType.error,
-        error: '音频文件不存在',
+        error: 'é³é¢æä»¶ä¸å­å¨',
       ));
       return;
     }
 
     final fileSize = await audioFile.length();
-    debugPrint('[TranscribeApi] 音频文件大小: $fileSize bytes, 路径: ${audioFile.path}');
+    final fileExt = audioFile.path.split('.').last.toLowerCase();
+    final mimeType = _getMimeType(audioFile.path);
+
+    debugPrint('[TranscribeApi] é³é¢æä»¶è¯¦æ:');
+    debugPrint('[TranscribeApi]   - è·¯å¾: ${audioFile.path}');
+    debugPrint('[TranscribeApi]   - å¤§å°: $fileSize bytes');
+    debugPrint('[TranscribeApi]   - æ©å±å: $fileExt');
+    debugPrint('[TranscribeApi]   - MIMEç±»å: $mimeType');
+
+    // éªè¯æä»¶å¤´
+    try {
+      final bytes = await audioFile.openRead(0, 4).first;
+      final header = String.fromCharCodes(bytes);
+      debugPrint('[TranscribeApi] æä»¶å¤´: $header (ææ: RIFF for WAV)');
+      if (header != 'RIFF') {
+        debugPrint('[TranscribeApi] è­¦å: æä»¶å¤´ä¸æ¯ RIFF, å®éæ¯ $header');
+      }
+    } catch (e) {
+      debugPrint('[TranscribeApi] æ æ³è¯»åæä»¶å¤´: $e');
+    }
 
     if (fileSize == 0) {
-      debugPrint('[TranscribeApi] 警告: 音频文件为空!');
+      debugPrint('[TranscribeApi] è­¦å: é³é¢æä»¶ä¸ºç©º!');
     }
 
     final request = http.MultipartRequest('POST', uri);
     request.headers['Authorization'] = 'Bearer $accessToken';
     request.files.add(await http.MultipartFile.fromPath('audio_file', audioFile.path));
-    
+
     if (logId != null) {
       request.fields['log_id'] = logId;
+      debugPrint('[TranscribeApi] log_id: $logId');
     }
 
-    debugPrint('[TranscribeApi] 开始发送转写请求...');
+    debugPrint('[TranscribeApi] å¼å§åéè½¬åè¯·æ±...');
 
     try {
       final streamedResponse = await _client.send(request);
       final response = await http.Response.fromStream(streamedResponse);
 
-      debugPrint('[TranscribeApi] 收到响应, statusCode: ${response.statusCode}');
-      debugPrint('[TranscribeApi] 响应 body: ${response.body}');
-
+      debugPrint('[TranscribeApi] æ¶å°ååº, statusCode: ${response.statusCode}');
       if (response.statusCode != 200) {
-        onEvent(TranscribeEvent(
-          type: TranscribeEventType.error,
-          error: 'Server error: ${response.statusCode}',
-        ));
-        return;
+        debugPrint('[TranscribeApi] ååº body: ${response.body}');
       }
 
       // 解析 SSE 流
@@ -111,7 +125,8 @@ class TranscribeApiClient {
           final json = jsonDecode(data) as Map<String, dynamic>;
           final code = json['code'] as int?;
 
-          if (code == 200) {
+          // å¼å®¹ code: 0 å code: 200 ä¸¤ç§æåååº
+          if (code == 0 || code == 200) {
             final text = json['data'] as String?;
             final eventLogId = json['log_id'] as String?;
 
@@ -155,5 +170,25 @@ class TranscribeApiClient {
 
   void dispose() {
     _client.close();
+  }
+
+  String _getMimeType(String path) {
+    final ext = path.split('.').last.toLowerCase();
+    switch (ext) {
+      case 'mp3':
+        return 'audio/mpeg';
+      case 'wav':
+        return 'audio/wav';
+      case 'm4a':
+        return 'audio/mp4';
+      case 'flac':
+        return 'audio/flac';
+      case 'ogg':
+        return 'audio/ogg';
+      case 'webm':
+        return 'audio/webm';
+      default:
+        return 'audio/mpeg';
+    }
   }
 }

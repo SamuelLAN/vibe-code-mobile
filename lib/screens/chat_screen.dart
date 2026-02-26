@@ -10,6 +10,7 @@ import 'package:provider/provider.dart';
 
 import '../models/attachment.dart';
 import '../models/message.dart';
+import '../services/audio_player_service.dart';
 import '../services/audio_recorder_service.dart';
 import '../services/auth_service.dart';
 import '../services/chat_service.dart';
@@ -32,14 +33,22 @@ class _ChatScreenState extends State<ChatScreen> {
   final List<Attachment> _pendingAttachments = [];
   final List<Attachment> _recentUploads = [];
   final AudioRecorderService _audioRecorder = AudioRecorderService();
+  final AudioPlayerService _audioPlayer = AudioPlayerService();
   InputMode _inputMode = InputMode.voice;
   bool _isFullscreenInput = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _audioPlayer.init();
+  }
 
   @override
   void dispose() {
     _textController.dispose();
     _scrollController.dispose();
     _audioRecorder.dispose();
+    _audioPlayer.dispose();
     super.dispose();
   }
 
@@ -382,6 +391,7 @@ class _ChatScreenState extends State<ChatScreen> {
                         final message = messages[index];
                         return MessageBubble(
                         message: message,
+                        audioPlayer: _audioPlayer,
                         onCopy: () {
                           Clipboard.setData(ClipboardData(text: message.content));
                           ScaffoldMessenger.of(context).showSnackBar(

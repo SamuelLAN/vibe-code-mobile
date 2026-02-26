@@ -127,21 +127,44 @@ class ChatService extends ChangeNotifier {
     await _generateAssistantResponse(text);
   }
 
-  /// 发送语音消息并进行转写
+  /// åéè¯­é³æ¶æ¯å¹¶è¿è¡è½¬å
   Future<void> sendVoiceMessage(File audioFile) async {
     if (_activeChat == null) return;
     _error = null;
 
-    debugPrint('[ChatService] 开始处理语音消息, 文件: ${audioFile.path}');
-    
-    // 检查文件是否存在
+    debugPrint('[ChatService] å¼å§å¤çè¯­é³æ¶æ¯, æä»¶: ${audioFile.path}');
+
+    // æ£æ¥æä»¶æ¯å¦å­å¨
     if (!await audioFile.exists()) {
-      debugPrint('[ChatService] 错误: 音频文件不存在');
+      debugPrint('[ChatService] éè¯¯: é³é¢æä»¶ä¸å­å¨');
       return;
     }
-    
+
     final fileSize = await audioFile.length();
-    debugPrint('[ChatService] 音频文件大小: $fileSize bytes');
+    final fileExt = audioFile.path.split('.').last.toLowerCase();
+    final mimeType = _getMimeType(audioFile.path);
+    debugPrint('[ChatService] é³é¢æä»¶ä¿¡æ¯:');
+    debugPrint('[ChatService]   - è·¯å¾: ${audioFile.path}');
+    debugPrint('[ChatService]   - å¤§å°: $fileSize bytes');
+    debugPrint('[ChatService]   - æ©å±å: $fileExt');
+    debugPrint('[ChatService]   - MIMEç±»å: $mimeType');
+
+    // éªè¯æä»¶æ ¼å¼
+    if (fileExt != 'wav') {
+      debugPrint('[ChatService] è­¦å: æä»¶æ©å±åä¸æ¯ .wav, å¯è½æ¯: $fileExt');
+    }
+
+    // è¯»åæä»¶å¤´éªè¯æ ¼å¼
+    try {
+      final bytes = await audioFile.openRead(0, 4).first;
+      final header = String.fromCharCodes(bytes);
+      debugPrint('[ChatService] æä»¶å¤´: $header (ææ: RIFF for WAV)');
+      if (header != 'RIFF') {
+        debugPrint('[ChatService] è­¦å: æä»¶å¤´ä¸æ¯ RIFF, å¯è½æ¯ $header');
+      }
+    } catch (e) {
+      debugPrint('[ChatService] æ æ³è¯»åæä»¶å¤´: $e');
+    }
 
     final messageId = _uuid.v4();
     

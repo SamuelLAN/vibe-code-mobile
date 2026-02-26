@@ -7,6 +7,7 @@ import 'package:url_launcher/url_launcher.dart';
 
 import '../models/attachment.dart';
 import '../models/message.dart';
+import '../services/audio_player_service.dart';
 
 /// 自定义 Markdown 元素类型
 enum CustomBlockType {
@@ -62,11 +63,13 @@ class MessageBubble extends StatelessWidget {
     required this.message,
     this.onCopy,
     this.onRetry,
+    this.audioPlayer,
   });
 
   final Message message;
   final VoidCallback? onCopy;
   final VoidCallback? onRetry;
+  final AudioPlayerService? audioPlayer;
 
   @override
   Widget build(BuildContext context) {
@@ -90,7 +93,11 @@ class MessageBubble extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            if (message.attachments.isNotEmpty) _AttachmentRow(attachments: message.attachments),
+            if (message.attachments.isNotEmpty) 
+              _AttachmentRow(
+                attachments: message.attachments, 
+                audioPlayer: audioPlayer,
+              ),
             if (message.attachments.isNotEmpty) const SizedBox(height: 8),
             if (isUser)
               Text(message.content, style: Theme.of(context).textTheme.bodyMedium)
@@ -640,9 +647,10 @@ class _InlineCodeBuilder extends MarkdownElementBuilder {
 }
 
 class _AttachmentRow extends StatelessWidget {
-  const _AttachmentRow({required this.attachments});
+  const _AttachmentRow({required this.attachments, this.audioPlayer});
 
   final List<Attachment> attachments;
+  final AudioPlayerService? audioPlayer;
 
   @override
   Widget build(BuildContext context) {
@@ -655,7 +663,10 @@ class _AttachmentRow extends StatelessWidget {
         itemBuilder: (context, index) {
           final attachment = attachments[index];
           if (attachment.type == AttachmentType.voice) {
-            return _VoiceMessageWidget(attachment: attachment);
+            return _VoiceMessageWidget(
+              attachment: attachment,
+              audioPlayer: audioPlayer,
+            );
           }
           return GestureDetector(
             onTap: attachment.type == AttachmentType.image
@@ -702,37 +713,134 @@ class _AttachmentRow extends StatelessWidget {
   }
 }
 
-/// 语音消息组件，显示转录状态
-class _VoiceMessageWidget extends StatelessWidget {
-  const _VoiceMessageWidget({required this.attachment});
+/// è¯­é³æ¶æ¯ç»ä»¶ï¼æ¾ç¤ºè½¬å½ç¶æåæ­æ¾æé®
+class _VoiceMessageWidget extends StatefulWidget {
+  const _VoiceMessageWidget({required this.attachment, this.audioPlayer});
 
   final Attachment attachment;
+  final AudioPlayerService? audioPlayer;
+
+  @override
+  State<_VoiceMessageWidget> createState() => _VoiceMessageWidgetState();
+}
+
+class _VoiceMessageWidgetState extends State<_VoiceMessageWidget> {
+  @override
+  void initState() {
+    super.initState();
+    widget.audioPlayer?.addListener(_onPlayerStateChanged);
+  }
+
+  @override
+  void dispose() {
+    widget.audioPlayer?.removeListener(_onPlayerStateChanged);
+    super.dispose();
+  }
+
+  void _onPlayerStateChanged() {
+    if (mounted) {
+      setState(() {});
+    }
+  }
+
+  bool get _isCurrentFilePlaying =>
+      widget.audioPlayer?.currentFilePath == widget.attachment.path &&
+      widget.audioPlayer?.isPlaying == true;
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      width: 160,
-      height: 48,
-      decoration: BoxDecoration(
-        color: _getBackgroundColor(context),
-        borderRadius: BorderRadius.circular(24),
-      ),
-      child: Row(
-        children: [
-          const SizedBox(width: 8),
-          _buildStatusIcon(context),
-          const SizedBox(width: 8),
-          Expanded(
-            child: _buildStatusText(context),
-          ),
-          const SizedBox(width: 8),
-        ],
+    final audioPlayer = widget.audioPlayer;
+    final isThisFilePlaying = audioPlayer?.currentFilePath == widget.attachment.path;
+    final isPlaying = isThisFilePlaying && audioPlayer?.isPlaying == true;
+
+    return GestureDetector(
+      onTap: audioPlayer != null
+          ? () => audioPlayer.play(widget.attachment.path)
+          : null,
+      child: Container(
+        width: 180,
+        height: 48,
+        decoration: BoxDecoration(
+          color: _getBackgroundColor(context, isPlaying),
+          borderRadius: BorderRadius.circular(24),
+        ),
+        child: Row(
+          children: [
+            const SizedBox(width: 8),
+            _buildPlayButton(context, isPlaying, audioPlayer != null),
+            const SizedBox(width: 8),
+            Expanded(
+              child: _buildContent(context, isPlaying),
+            ),
+            if (isThisFilePlaying && audioPlayer != null) ...[
+              _buildProgressIndicator(context),
+              const SizedBox(width: 4),
+            ],
+            const SizedBox(width: 4),
+          ],
+        ),
       ),
     );
   }
 
-  Color _getBackgroundColor(BuildContext context) {
-    switch (attachment.transcriptionStatus) {
+  Widget _buildPlayButton(BuildContext context, bool isPlaying, bool hasPlayer) {
+    if (!hasPlayer) {
+      return _buildStatusIcon(context);
+    }
+    
+    return Container(
+      width: 32,
+      height: 32,
+      decoration: BoxDecoration(
+        color: Theme.of(context).colorScheme.primary,
+        shape: BoxShape.circle,
+      ),
+      child: Icon(
+        isPlaying ? Icons.pause : Icons.play_arrow,
+        color: Colors.white,
+        size: 20,
+      ),
+    );
+  }
+
+  Widget _buildProgressIndicator(BuildContext context) {
+    final player = widget.audioPlayer;
+    if (player == null) return const SizedBox.shrink();
+
+    final duration = player.duration;
+    final position = player.position;
+
+    if (duration == null || duration.inMilliseconds == 0) {
+      return const SizedBox(
+        width: 24,
+        height: 24,
+        child: CircularProgressIndicator(strokeWidth: 2),
+      );
+    }
+
+    final progress = position.inMilliseconds / duration.inMilliseconds;
+    
+    return SizedBox(
+      width: 40,
+      height: 4,
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(2),
+        child: LinearProgressIndicator(
+          value: progress.clamp(0.0, 1.0),
+          backgroundColor: Colors.grey[300],
+          valueColor: AlwaysStoppedAnimation<Color>(
+            Theme.of(context).colorScheme.primary,
+          ),
+        ),
+      ),
+    );
+  }
+
+  Color _getBackgroundColor(BuildContext context, bool isPlaying) {
+    if (isPlaying) {
+      return Theme.of(context).colorScheme.primary.withValues(alpha: 0.2);
+    }
+    switch (widget.attachment.transcriptionStatus) {
       case TranscriptionStatus.loading:
         return Theme.of(context).colorScheme.primary.withValues(alpha: 0.2);
       case TranscriptionStatus.completed:
@@ -744,8 +852,94 @@ class _VoiceMessageWidget extends StatelessWidget {
     }
   }
 
+  Widget _buildContent(BuildContext context, bool isPlaying) {
+    final textStyle = TextStyle(
+      fontSize: 12,
+      color: Theme.of(context).colorScheme.onSurface,
+    );
+
+    // å¦ææ­£å¨æ­æ¾ï¼æ¾ç¤ºæ­æ¾ç¶æ
+    if (isPlaying) {
+      return Row(
+        children: [
+          const Icon(Icons.volume_up, size: 16),
+          const SizedBox(width: 4),
+          Text('æ­æ¾ä¸­...', style: textStyle),
+        ],
+      );
+    }
+
+    switch (widget.attachment.transcriptionStatus) {
+      case TranscriptionStatus.loading:
+        return Row(
+          children: [
+            SizedBox(
+              width: 12,
+              height: 12,
+              child: CircularProgressIndicator(
+                strokeWidth: 2,
+                color: Theme.of(context).colorScheme.primary,
+              ),
+            ),
+            const SizedBox(width: 6),
+            Text('è½¬å½ä¸­...', style: textStyle),
+          ],
+        );
+      case TranscriptionStatus.completed:
+        return Row(
+          children: [
+            const Icon(Icons.check_circle, size: 16, color: Colors.green),
+            const SizedBox(width: 4),
+            Expanded(
+              child: Text(
+                widget.attachment.transcribedText ?? 'è½¬å½å®æ',
+                style: textStyle,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              ),
+            ),
+          ],
+        );
+      case TranscriptionStatus.error:
+        return Row(
+          children: [
+            const Icon(Icons.error, size: 16, color: Colors.red),
+            const SizedBox(width: 4),
+            Expanded(
+              child: Text(
+                'è½¬å½å¤±è´¥',
+                style: textStyle.copyWith(color: Colors.red),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              ),
+            ),
+          ],
+        );
+      default:
+        // æ²¡ææ­æ¾å¨æ¶æ¾ç¤ºåå§ç¶æï¼ææ­æ¾å¨æ¶æ¾ç¤ºå¯ç¹å»æç¤º
+        if (widget.audioPlayer != null) {
+          return Row(
+            children: [
+              const Icon(Icons.volume_up, size: 16),
+              const SizedBox(width: 4),
+              Expanded(
+                child: Text(
+                  'ç¹å»æ­æ¾',
+                  style: textStyle,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
+            ],
+          );
+        }
+        return Text('è¯­é³æ¶æ¯', style: textStyle);
+    }
+  }
+
+  // ä¿çåæçç¶æå¾æ æ¹æ³ç¨äºæ²¡ææ­æ¾å¨çåºæ¯
   Widget _buildStatusIcon(BuildContext context) {
-    switch (attachment.transcriptionStatus) {
+    switch (widget.attachment.transcriptionStatus) {
       case TranscriptionStatus.loading:
         return SizedBox(
           width: 16,
@@ -761,32 +955,6 @@ class _VoiceMessageWidget extends StatelessWidget {
         return const Icon(Icons.error, size: 20, color: Colors.red);
       default:
         return const Icon(Icons.volume_up, size: 20);
-    }
-  }
-
-  Widget _buildStatusText(BuildContext context) {
-    final textStyle = TextStyle(
-      fontSize: 12,
-      color: Theme.of(context).colorScheme.onSurface,
-    );
-
-    switch (attachment.transcriptionStatus) {
-      case TranscriptionStatus.loading:
-        return Text('转录中...', style: textStyle);
-      case TranscriptionStatus.completed:
-        return Text(
-          attachment.transcribedText ?? '转录完成',
-          style: textStyle,
-          maxLines: 1,
-          overflow: TextOverflow.ellipsis,
-        );
-      case TranscriptionStatus.error:
-        return Text(
-          '转录失败',
-          style: textStyle.copyWith(color: Colors.red),
-        );
-      default:
-        return Text('语音消息', style: textStyle);
     }
   }
 }
