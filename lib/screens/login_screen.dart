@@ -12,10 +12,16 @@ class LoginScreen extends StatefulWidget {
 }
 
 class _LoginScreenState extends State<LoginScreen> {
+  static const List<String> _projects = <String>[
+    'plutux-board',
+    'vibe-code-mobile',
+  ];
+
   final _formKey = GlobalKey<FormState>();
   final TextEditingController _emailController = TextEditingController();
   final TextEditingController _passwordController = TextEditingController();
   bool _obscure = true;
+  String _selectedProject = 'plutux-board';
 
   @override
   void dispose() {
@@ -46,7 +52,8 @@ class _LoginScreenState extends State<LoginScreen> {
                     // 打开系统设置
                     if (await canLaunchUrl(Uri.parse('App-Prefs:root=WIFI'))) {
                       await launchUrl(Uri.parse('App-Prefs:root=WIFI'));
-                    } else if (await canLaunchUrl(Uri.parse('App-Prefs:root=MOBILE_DATA'))) {
+                    } else if (await canLaunchUrl(
+                        Uri.parse('App-Prefs:root=MOBILE_DATA'))) {
                       await launchUrl(Uri.parse('App-Prefs:root=MOBILE_DATA'));
                     } else {
                       if (mounted) {
@@ -56,7 +63,8 @@ class _LoginScreenState extends State<LoginScreen> {
                       }
                     }
                   },
-                  child: const Text('打开设置', style: TextStyle(color: Colors.white)),
+                  child:
+                      const Text('打开设置', style: TextStyle(color: Colors.white)),
                 ),
             ],
           ),
@@ -93,7 +101,10 @@ class _LoginScreenState extends State<LoginScreen> {
                               width: 72,
                               height: 72,
                               decoration: BoxDecoration(
-                                color: Theme.of(context).colorScheme.primary.withOpacity(0.1),
+                                color: Theme.of(context)
+                                    .colorScheme
+                                    .primary
+                                    .withOpacity(0.1),
                                 borderRadius: BorderRadius.circular(20),
                               ),
                               child: Icon(
@@ -103,17 +114,26 @@ class _LoginScreenState extends State<LoginScreen> {
                               ),
                             ),
                             const SizedBox(height: 16),
-                        Text(
-                          'Plutux-code',
-                          style: Theme.of(context).textTheme.headlineSmall?.copyWith(
-                                fontWeight: FontWeight.w700,
-                              ),
-                        ),
-                        const SizedBox(height: 6),
-                        Text(
-                          'Secure gateway to your AI coding workspace',
-                              style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                                    color: Theme.of(context).colorScheme.onSurface.withOpacity(0.7),
+                            Text(
+                              'Plutux-code',
+                              style: Theme.of(context)
+                                  .textTheme
+                                  .headlineSmall
+                                  ?.copyWith(
+                                    fontWeight: FontWeight.w700,
+                                  ),
+                            ),
+                            const SizedBox(height: 6),
+                            Text(
+                              'Secure gateway to your AI coding workspace',
+                              style: Theme.of(context)
+                                  .textTheme
+                                  .bodyMedium
+                                  ?.copyWith(
+                                    color: Theme.of(context)
+                                        .colorScheme
+                                        .onSurface
+                                        .withOpacity(0.7),
                                   ),
                               textAlign: TextAlign.center,
                             ),
@@ -134,7 +154,8 @@ class _LoginScreenState extends State<LoginScreen> {
                             if (value == null || value.trim().isEmpty) {
                               return 'Email is required';
                             }
-                            final emailRegex = RegExp(r'^[\w-\.]+@([\w-]+\.)+[\w-]{2,}$');
+                            final emailRegex =
+                                RegExp(r'^[\w-\.]+@([\w-]+\.)+[\w-]{2,}$');
                             if (!emailRegex.hasMatch(value.trim())) {
                               return 'Please enter a valid email';
                             }
@@ -150,35 +171,69 @@ class _LoginScreenState extends State<LoginScreen> {
                             hintText: 'Enter your password',
                             prefixIcon: const Icon(Icons.lock_outline),
                             suffixIcon: IconButton(
-                              onPressed: () => setState(() => _obscure = !_obscure),
-                              icon: Icon(_obscure ? Icons.visibility_off : Icons.visibility),
+                              onPressed: () =>
+                                  setState(() => _obscure = !_obscure),
+                              icon: Icon(_obscure
+                                  ? Icons.visibility_off
+                                  : Icons.visibility),
                             ),
                           ),
-                          validator: (value) =>
-                              value == null || value.isEmpty ? 'Password is required' : null,
+                          validator: (value) => value == null || value.isEmpty
+                              ? 'Password is required'
+                              : null,
                           onFieldSubmitted: (_) => _submit(),
+                        ),
+                        const SizedBox(height: 16),
+                        DropdownButtonFormField<String>(
+                          initialValue: _selectedProject,
+                          decoration: const InputDecoration(
+                            labelText: 'Project',
+                            prefixIcon: Icon(Icons.folder_outlined),
+                          ),
+                          items: _projects
+                              .map(
+                                (project) => DropdownMenuItem<String>(
+                                  value: project,
+                                  child: Text(project),
+                                ),
+                              )
+                              .toList(),
+                          onChanged: auth.isLoading
+                              ? null
+                              : (value) {
+                                  if (value == null) return;
+                                  setState(() {
+                                    _selectedProject = value;
+                                  });
+                                },
                         ),
                         const SizedBox(height: 16),
                         ElevatedButton(
                           onPressed: auth.isLoading ? null : _submit,
                           style: ElevatedButton.styleFrom(
                             padding: const EdgeInsets.symmetric(vertical: 14),
-                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                            shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(14)),
                           ),
                           child: auth.isLoading
                               ? const SizedBox(
                                   width: 20,
                                   height: 20,
-                                  child: CircularProgressIndicator(strokeWidth: 2),
+                                  child:
+                                      CircularProgressIndicator(strokeWidth: 2),
                                 )
                               : const Text('Login'),
                         ),
                         const SizedBox(height: 12),
                         Text(
                           'No registration or password recovery inside the app.',
-                          style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                                color: Theme.of(context).colorScheme.onSurface.withOpacity(0.6),
-                              ),
+                          style:
+                              Theme.of(context).textTheme.bodySmall?.copyWith(
+                                    color: Theme.of(context)
+                                        .colorScheme
+                                        .onSurface
+                                        .withOpacity(0.6),
+                                  ),
                           textAlign: TextAlign.center,
                         ),
                       ],
