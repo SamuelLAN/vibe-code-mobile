@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 import '../services/auth_service.dart';
 
@@ -31,10 +32,36 @@ class _LoginScreenState extends State<LoginScreen> {
       password: _passwordController.text,
     );
     if (!success && mounted) {
+      final error = auth.error ?? '登录失败';
+      final isNetworkError = error.contains('网络连接失败');
+
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text(auth.error ?? '登录失败'),
+          content: Row(
+            children: [
+              Expanded(child: Text(error)),
+              if (isNetworkError)
+                TextButton(
+                  onPressed: () async {
+                    // 打开系统设置
+                    if (await canLaunchUrl(Uri.parse('App-Prefs:root=WIFI'))) {
+                      await launchUrl(Uri.parse('App-Prefs:root=WIFI'));
+                    } else if (await canLaunchUrl(Uri.parse('App-Prefs:root=MOBILE_DATA'))) {
+                      await launchUrl(Uri.parse('App-Prefs:root=MOBILE_DATA'));
+                    } else {
+                      if (mounted) {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(content: Text('无法打开设置，请手动在手机设置中检查网络')),
+                        );
+                      }
+                    }
+                  },
+                  child: const Text('打开设置', style: TextStyle(color: Colors.white)),
+                ),
+            ],
+          ),
           backgroundColor: Theme.of(context).colorScheme.error,
+          duration: const Duration(seconds: 5),
         ),
       );
     }

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import '../services/audio_recorder_service.dart';
+import '../services/permission_service.dart';
 import 'waveform_indicator.dart';
 
 enum InputMode { voice, text }
@@ -301,9 +302,54 @@ class _InputBarState extends State<InputBar> {
   }
 
   void _onPanStart(DragStartDetails details) async {
-    // 如果有录音服务，开始录音
+    // 如果有录音服务，先请求麦克风权限
     if (widget._recorder != null) {
-      await widget._recorder!.startRecording();
+      final permissionService = PermissionService();
+      final hasPermission = await permissionService.requestMicrophonePermission();
+
+      if (!hasPermission) {
+        // 权限被拒绝，提示用户
+        if (mounted) {
+          final shouldOpenSettings = await showDialog<bool>(
+            context: context,
+            builder: (context) => AlertDialog(
+              title: const Text('需要麦克风权限'),
+              content: const Text('语音输入需要麦克风权限，是否前往设置开启？'),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.pop(context, false),
+                  child: const Text('取消'),
+                ),
+                TextButton(
+                  onPressed: () => Navigator.pop(context, true),
+                  child: const Text('去设置'),
+                ),
+              ],
+            ),
+          );
+
+          if (shouldOpenSettings == true) {
+            await permissionService.openSettings();
+          }
+        }
+        return;
+      }
+
+      // 开始录音
+      final filePath = await widget._recorder!.startRecording();
+      
+      // 如果录音失败（可能是模拟器或其他问题）
+      if (filePath == null) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('无法开始录音，请确保已在手机设置中允许麦克风权限'),
+              duration: Duration(seconds: 3),
+            ),
+          );
+        }
+        return;
+      }
     }
     setState(() {
       _isRecording = true;
@@ -343,8 +389,16 @@ class _InputBarState extends State<InputBar> {
         // 回调录音文件路径
         widget.onRecordingComplete!(filePath);
       } else if (filePath == null) {
-        // 录音失败，不做操作（不触发文件选择）
+        // 录音失败，提示用户去设置中开启权限
         debugPrint('录音失败或文件路径为空');
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('请在手机设置中允许麦克风权限'),
+              duration: Duration(seconds: 3),
+            ),
+          );
+        }
       } else if (widget.onVoiceSend != null) {
         // 兼容旧的回调
         widget.onVoiceSend!();

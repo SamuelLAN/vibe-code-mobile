@@ -105,7 +105,19 @@ class AuthService extends ChangeNotifier {
     } catch (e) {
       _isLoading = false;
       debugPrint('Login exception: $e');
-      _error = '网络错误: $e';
+
+      // 检测网络连接错误
+      final errorStr = e.toString();
+      if (errorStr.contains('SocketException') ||
+          errorStr.contains('Connection failed') ||
+          errorStr.contains('No route to host') ||
+          errorStr.contains('HandshakeException') ||
+          errorStr.contains('TimeoutException')) {
+        _error = '网络连接失败，请检查网络或服务器设置';
+      } else {
+        _error = '网络错误: $e';
+      }
+
       notifyListeners();
       return false;
     }

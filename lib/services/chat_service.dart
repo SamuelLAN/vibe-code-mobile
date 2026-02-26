@@ -132,6 +132,17 @@ class ChatService extends ChangeNotifier {
     if (_activeChat == null) return;
     _error = null;
 
+    debugPrint('[ChatService] 开始处理语音消息, 文件: ${audioFile.path}');
+    
+    // 检查文件是否存在
+    if (!await audioFile.exists()) {
+      debugPrint('[ChatService] 错误: 音频文件不存在');
+      return;
+    }
+    
+    final fileSize = await audioFile.length();
+    debugPrint('[ChatService] 音频文件大小: $fileSize bytes');
+
     final messageId = _uuid.v4();
     
     // 创建语音消息，初始状态为转录中
@@ -201,7 +212,7 @@ class ChatService extends ChangeNotifier {
               isTranscribeComplete = true;
               break;
             case TranscribeEventType.error:
-              debugPrint('转写错误: ${event.error}');
+              debugPrint('[ChatService] 转写错误: ${event.error}');
               transcribeError = event.error;
               _updateAttachmentStatus(attachment, TranscriptionStatus.error, event.error);
               break;
