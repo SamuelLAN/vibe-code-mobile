@@ -1,4 +1,5 @@
 import 'attachment.dart';
+import 'stream_element.dart';
 
 enum MessageRole { user, assistant }
 
@@ -11,7 +12,8 @@ class Message {
     required this.createdAt,
     required this.attachments,
     this.isStreaming = false,
-  });
+    List<StreamElement>? streamElements,
+  }) : streamElements = streamElements ?? <StreamElement>[];
 
   final String id;
   final String chatId;
@@ -20,6 +22,7 @@ class Message {
   DateTime createdAt;
   List<Attachment> attachments;
   bool isStreaming;
+  List<StreamElement> streamElements;
 
   Map<String, dynamic> toMap() => {
         'id': id,

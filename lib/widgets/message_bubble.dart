@@ -7,6 +7,7 @@ import 'package:url_launcher/url_launcher.dart';
 
 import '../models/attachment.dart';
 import '../models/message.dart';
+import '../models/stream_element.dart';
 import '../services/audio_player_service.dart';
 
 /// 自定义 Markdown 元素类型
@@ -84,7 +85,8 @@ class MessageBubble extends StatelessWidget {
       child: Container(
         margin: const EdgeInsets.symmetric(vertical: 6),
         padding: const EdgeInsets.all(12),
-        constraints: BoxConstraints(maxWidth: MediaQuery.of(context).size.width * 0.82),
+        constraints:
+            BoxConstraints(maxWidth: MediaQuery.of(context).size.width * 0.82),
         decoration: BoxDecoration(
           color: background,
           borderRadius: BorderRadius.circular(16),
@@ -93,39 +95,95 @@ class MessageBubble extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            if (message.attachments.isNotEmpty) 
+            if (message.attachments.isNotEmpty)
               _AttachmentRow(
-                attachments: message.attachments, 
+                attachments: message.attachments,
                 audioPlayer: audioPlayer,
               ),
             if (message.attachments.isNotEmpty) const SizedBox(height: 8),
             if (isUser)
-              Text(message.content, style: Theme.of(context).textTheme.bodyMedium)
+              Text(message.content,
+                  style: Theme.of(context).textTheme.bodyMedium)
             else
-              _EnhancedMarkdown(
-                content: message.content.isEmpty && message.isStreaming ? '...' : message.content,
+              _AssistantMessageContent(
+                message: message,
                 isDark: isDark,
               ),
-            if (!isUser) ...[
+            if (onCopy != null || (!isUser && onRetry != null)) ...[
               const SizedBox(height: 6),
               Row(
                 children: [
-                  IconButton(
-                    onPressed: onCopy,
-                    icon: const Icon(Icons.copy, size: 18),
-                    tooltip: 'Copy',
-                  ),
-                  IconButton(
-                    onPressed: onRetry,
-                    icon: const Icon(Icons.refresh, size: 18),
-                    tooltip: 'Retry',
-                  ),
+                  if (onCopy != null)
+                    IconButton(
+                      onPressed: onCopy,
+                      icon: const Icon(Icons.copy, size: 18),
+                      tooltip: 'Copy',
+                    ),
+                  if (!isUser && onRetry != null)
+                    IconButton(
+                      onPressed: onRetry,
+                      icon: const Icon(Icons.refresh, size: 18),
+                      tooltip: 'Retry',
+                    ),
                 ],
               ),
             ],
           ],
         ),
       ),
+    );
+  }
+}
+
+class _AssistantMessageContent extends StatelessWidget {
+  const _AssistantMessageContent({
+    required this.message,
+    required this.isDark,
+  });
+
+  final Message message;
+  final bool isDark;
+
+  @override
+  Widget build(BuildContext context) {
+    if (message.streamElements.isEmpty) {
+      return _EnhancedMarkdown(
+        content: message.content.isEmpty && message.isStreaming
+            ? '...'
+            : message.content,
+        isDark: isDark,
+      );
+    }
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        for (final element in message.streamElements) _buildElement(element),
+      ],
+    );
+  }
+
+  Widget _buildElement(StreamElement element) {
+    final codeFence = switch (element.type) {
+      StreamElementType.text => null,
+      StreamElementType.functionCall => 'function_call',
+      StreamElementType.functionResult => 'function_result',
+      StreamElementType.thinking => 'thinking',
+      StreamElementType.insightStart => 'insight_start',
+      StreamElementType.insightEnd => 'insight_end',
+      StreamElementType.edge => 'edge',
+    };
+
+    if (codeFence == null) {
+      return _EnhancedMarkdown(
+        content: element.content,
+        isDark: isDark,
+      );
+    }
+
+    return _EnhancedMarkdown(
+      content: '```$codeFence\n${element.content}\n```',
+      isDark: isDark,
     );
   }
 }
@@ -183,7 +241,8 @@ class _EnhancedMarkdown extends StatelessWidget {
       codeblockDecoration: BoxDecoration(
         color: isDark ? Colors.grey[900] : Colors.grey[100],
         borderRadius: BorderRadius.circular(10),
-        border: Border.all(color: isDark ? Colors.grey[700]! : Colors.grey[300]!),
+        border:
+            Border.all(color: isDark ? Colors.grey[700]! : Colors.grey[300]!),
       ),
       codeblockPadding: const EdgeInsets.all(12),
       blockquote: textTheme.bodyMedium?.copyWith(
@@ -213,7 +272,8 @@ class _EnhancedMarkdown extends StatelessWidget {
       ),
       horizontalRuleDecoration: BoxDecoration(
         border: Border(
-          top: BorderSide(color: isDark ? Colors.grey[700]! : Colors.grey[300]!, width: 1),
+          top: BorderSide(
+              color: isDark ? Colors.grey[700]! : Colors.grey[300]!, width: 1),
         ),
       ),
     );
@@ -236,7 +296,7 @@ class _PreCodeBlockBuilder extends MarkdownElementBuilder {
   @override
   Widget? visitElementAfter(element, TextStyle? preferredStyle) {
     final codeContent = element.textContent;
-    
+
     // 尝试从 element 获取 language 信息
     String? language;
     if (element.attributes.containsKey('class')) {
@@ -259,7 +319,8 @@ class _PreCodeBlockBuilder extends MarkdownElementBuilder {
       decoration: BoxDecoration(
         color: isDark ? Colors.grey[900] : Colors.grey[100],
         borderRadius: BorderRadius.circular(10),
-        border: Border.all(color: isDark ? Colors.grey[700]! : Colors.grey[300]!),
+        border:
+            Border.all(color: isDark ? Colors.grey[700]! : Colors.grey[300]!),
       ),
       child: SingleChildScrollView(
         scrollDirection: Axis.horizontal,
@@ -352,6 +413,12 @@ class _PreCodeBlockBuilder extends MarkdownElementBuilder {
 
   Widget _buildFunctionCallBlock(String content) {
     final parsed = _tryParseJson(content);
+    final functionName = parsed?['name']?.toString();
+    final args = parsed?['arguments'] ?? parsed?['args'];
+
+    if (functionName == 'gsearch') {
+      return _buildGSearchCallBlock(parsed, content);
+    }
 
     return Container(
       width: double.infinity,
@@ -360,7 +427,8 @@ class _PreCodeBlockBuilder extends MarkdownElementBuilder {
       decoration: BoxDecoration(
         color: Colors.purple.withValues(alpha: 0.1),
         borderRadius: BorderRadius.circular(10),
-        border: Border.all(color: Colors.purple.withValues(alpha: 0.3), width: 1),
+        border:
+            Border.all(color: Colors.purple.withValues(alpha: 0.3), width: 1),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -377,16 +445,17 @@ class _PreCodeBlockBuilder extends MarkdownElementBuilder {
                   color: Colors.purple[700],
                 ),
               ),
-              if (parsed?['name'] != null) ...[
+              if (functionName != null) ...[
                 const SizedBox(width: 8),
                 Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
                   decoration: BoxDecoration(
                     color: Colors.purple.withValues(alpha: 0.2),
                     borderRadius: BorderRadius.circular(4),
                   ),
                   child: Text(
-                    parsed!['name'].toString(),
+                    functionName,
                     style: TextStyle(
                       fontFamily: 'monospace',
                       fontSize: 11,
@@ -399,8 +468,8 @@ class _PreCodeBlockBuilder extends MarkdownElementBuilder {
             ],
           ),
           const SizedBox(height: 8),
-          if (parsed?['arguments'] != null)
-            _buildArguments(parsed!['arguments'])
+          if (args != null)
+            _buildArguments(args)
           else if (parsed != null)
             Container(
               padding: const EdgeInsets.all(8),
@@ -461,6 +530,14 @@ class _PreCodeBlockBuilder extends MarkdownElementBuilder {
 
   Widget _buildFunctionResultBlock(String content) {
     final parsed = _tryParseJson(content);
+    final functionName = parsed?['name']?.toString();
+
+    if (functionName == 'gsearch') {
+      final gsearchWidget = _buildGSearchResultBlock(parsed, content);
+      if (gsearchWidget != null) {
+        return gsearchWidget;
+      }
+    }
 
     return Container(
       width: double.infinity,
@@ -469,7 +546,8 @@ class _PreCodeBlockBuilder extends MarkdownElementBuilder {
       decoration: BoxDecoration(
         color: Colors.green.withValues(alpha: 0.1),
         borderRadius: BorderRadius.circular(10),
-        border: Border.all(color: Colors.green.withValues(alpha: 0.3), width: 1),
+        border:
+            Border.all(color: Colors.green.withValues(alpha: 0.3), width: 1),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -519,6 +597,86 @@ class _PreCodeBlockBuilder extends MarkdownElementBuilder {
     );
   }
 
+  Widget _buildGSearchCallBlock(Map<String, dynamic>? parsed, String content) {
+    final args = parsed?['args'];
+    String? query;
+    if (args is Map<String, dynamic>) {
+      query = args['query']?.toString();
+    } else if (args is Map) {
+      query = args['query']?.toString();
+    }
+
+    return Container(
+      width: double.infinity,
+      margin: const EdgeInsets.symmetric(vertical: 8),
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+      decoration: BoxDecoration(
+        color: (isDark ? Colors.blueGrey[900] : Colors.blueGrey[50]),
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(
+          color: Colors.blueGrey.withValues(alpha: 0.35),
+          width: 1,
+        ),
+      ),
+      child: Row(
+        children: [
+          const Icon(Icons.search, size: 16, color: Colors.blueGrey),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text(
+              query == null || query.isEmpty ? 'Search' : 'Search $query',
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: TextStyle(
+                fontSize: 12,
+                fontWeight: FontWeight.w600,
+                color: isDark ? Colors.grey[200] : Colors.blueGrey[800],
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget? _buildGSearchResultBlock(
+      Map<String, dynamic>? parsed, String content) {
+    if (parsed == null) return null;
+    final response = parsed['response'];
+    if (response is! Map) return null;
+    final organic = response['organic'];
+    if (organic is! List) return null;
+
+    final items = organic
+        .whereType<Map>()
+        .map((item) => _SearchResultItem(
+              title: item['title']?.toString() ?? '',
+              link: item['link']?.toString() ?? '',
+              snippet: item['snippet']?.toString(),
+              date: item['date']?.toString(),
+              source: _hostFromUrl(item['link']?.toString()),
+            ))
+        .where((e) => e.title.isNotEmpty)
+        .toList();
+
+    if (items.isEmpty) return null;
+
+    return _SearchResultsToolBlock(
+      items: items,
+      title: 'Search results',
+      isDark: isDark,
+    );
+  }
+
+  String? _hostFromUrl(String? url) {
+    if (url == null || url.isEmpty) return null;
+    try {
+      return Uri.parse(url).host;
+    } catch (_) {
+      return null;
+    }
+  }
+
   Widget _buildInsightBlock(String content) {
     return Container(
       width: double.infinity,
@@ -527,7 +685,8 @@ class _PreCodeBlockBuilder extends MarkdownElementBuilder {
       decoration: BoxDecoration(
         color: Colors.amber.withValues(alpha: 0.1),
         borderRadius: BorderRadius.circular(10),
-        border: Border.all(color: Colors.amber.withValues(alpha: 0.3), width: 1),
+        border:
+            Border.all(color: Colors.amber.withValues(alpha: 0.3), width: 1),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -646,6 +805,190 @@ class _InlineCodeBuilder extends MarkdownElementBuilder {
   }
 }
 
+class _SearchResultItem {
+  const _SearchResultItem({
+    required this.title,
+    required this.link,
+    this.snippet,
+    this.date,
+    this.source,
+  });
+
+  final String title;
+  final String link;
+  final String? snippet;
+  final String? date;
+  final String? source;
+}
+
+class _SearchResultsToolBlock extends StatefulWidget {
+  const _SearchResultsToolBlock({
+    required this.items,
+    required this.title,
+    required this.isDark,
+  });
+
+  final List<_SearchResultItem> items;
+  final String title;
+  final bool isDark;
+
+  @override
+  State<_SearchResultsToolBlock> createState() =>
+      _SearchResultsToolBlockState();
+}
+
+class _SearchResultsToolBlockState extends State<_SearchResultsToolBlock> {
+  bool _expanded = true;
+
+  @override
+  Widget build(BuildContext context) {
+    final borderColor = Colors.blueGrey.withValues(alpha: 0.35);
+    final bgColor =
+        widget.isDark ? Colors.blueGrey[900]! : Colors.blueGrey[50]!;
+    final headerColor = widget.isDark ? Colors.grey[200] : Colors.blueGrey[800];
+    final subColor = widget.isDark ? Colors.grey[400] : Colors.blueGrey[600];
+
+    return Container(
+      width: double.infinity,
+      margin: const EdgeInsets.symmetric(vertical: 8),
+      decoration: BoxDecoration(
+        color: bgColor,
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: borderColor),
+      ),
+      child: Column(
+        children: [
+          InkWell(
+            borderRadius: const BorderRadius.vertical(top: Radius.circular(10)),
+            onTap: () => setState(() => _expanded = !_expanded),
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+              child: Row(
+                children: [
+                  Icon(
+                    _expanded ? Icons.expand_more : Icons.chevron_right,
+                    size: 18,
+                    color: subColor,
+                  ),
+                  const SizedBox(width: 4),
+                  const Icon(Icons.search, size: 16, color: Colors.blueGrey),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      '${widget.title} (${widget.items.length} results)',
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w600,
+                        color: headerColor,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+          if (_expanded)
+            Padding(
+              padding: const EdgeInsets.fromLTRB(12, 0, 12, 10),
+              child: Column(
+                children: [
+                  for (var i = 0; i < widget.items.length; i++) ...[
+                    _SearchResultRow(
+                        item: widget.items[i], isDark: widget.isDark),
+                    if (i != widget.items.length - 1)
+                      Divider(
+                        height: 12,
+                        color: borderColor,
+                      ),
+                  ],
+                ],
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+}
+
+class _SearchResultRow extends StatelessWidget {
+  const _SearchResultRow({
+    required this.item,
+    required this.isDark,
+  });
+
+  final _SearchResultItem item;
+  final bool isDark;
+
+  Future<void> _openLink() async {
+    final uri = Uri.tryParse(item.link);
+    if (uri == null) return;
+    if (await canLaunchUrl(uri)) {
+      await launchUrl(uri, mode: LaunchMode.externalApplication);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final titleColor = isDark ? Colors.lightBlue[200] : Colors.blue[800];
+    final metaColor = isDark ? Colors.grey[400] : Colors.grey[700];
+    final snippetColor = isDark ? Colors.grey[300] : Colors.grey[800];
+
+    final metaParts = <String>[
+      if (item.date != null && item.date!.isNotEmpty) item.date!,
+      if (item.source != null && item.source!.isNotEmpty) item.source!,
+    ];
+
+    return InkWell(
+      onTap: _openLink,
+      borderRadius: BorderRadius.circular(6),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(vertical: 4, horizontal: 2),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              item.title,
+              style: TextStyle(
+                fontSize: 12,
+                fontWeight: FontWeight.w600,
+                color: titleColor,
+              ),
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
+            ),
+            if (metaParts.isNotEmpty) ...[
+              const SizedBox(height: 2),
+              Text(
+                metaParts.join('  •  '),
+                style: TextStyle(
+                  fontSize: 10.5,
+                  color: metaColor,
+                ),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              ),
+            ],
+            if (item.snippet != null && item.snippet!.isNotEmpty) ...[
+              const SizedBox(height: 2),
+              Text(
+                item.snippet!,
+                style: TextStyle(
+                  fontSize: 11,
+                  color: snippetColor,
+                ),
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
+              ),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+}
+
 class _AttachmentRow extends StatelessWidget {
   const _AttachmentRow({required this.attachments, this.audioPlayer});
 
@@ -684,11 +1027,13 @@ class _AttachmentRow extends StatelessWidget {
             child: ClipRRect(
               borderRadius: BorderRadius.circular(12),
               child: attachment.type == AttachmentType.image
-                  ? Image.file(File(attachment.path), width: 72, height: 72, fit: BoxFit.cover)
+                  ? Image.file(File(attachment.path),
+                      width: 72, height: 72, fit: BoxFit.cover)
                   : Container(
                       width: 72,
                       height: 72,
-                      color: Theme.of(context).colorScheme.surfaceContainerHighest,
+                      color:
+                          Theme.of(context).colorScheme.surfaceContainerHighest,
                       child: Column(
                         mainAxisAlignment: MainAxisAlignment.center,
                         children: [
@@ -750,7 +1095,8 @@ class _VoiceMessageWidgetState extends State<_VoiceMessageWidget> {
   @override
   Widget build(BuildContext context) {
     final audioPlayer = widget.audioPlayer;
-    final isThisFilePlaying = audioPlayer?.currentFilePath == widget.attachment.path;
+    final isThisFilePlaying =
+        audioPlayer?.currentFilePath == widget.attachment.path;
     final isPlaying = isThisFilePlaying && audioPlayer?.isPlaying == true;
 
     return GestureDetector(
@@ -783,11 +1129,12 @@ class _VoiceMessageWidgetState extends State<_VoiceMessageWidget> {
     );
   }
 
-  Widget _buildPlayButton(BuildContext context, bool isPlaying, bool hasPlayer) {
+  Widget _buildPlayButton(
+      BuildContext context, bool isPlaying, bool hasPlayer) {
     if (!hasPlayer) {
       return _buildStatusIcon(context);
     }
-    
+
     return Container(
       width: 32,
       height: 32,
@@ -819,7 +1166,7 @@ class _VoiceMessageWidgetState extends State<_VoiceMessageWidget> {
     }
 
     final progress = position.inMilliseconds / duration.inMilliseconds;
-    
+
     return SizedBox(
       width: 40,
       height: 4,

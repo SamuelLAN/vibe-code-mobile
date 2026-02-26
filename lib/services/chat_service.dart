@@ -9,8 +9,10 @@ import '../apis/vibe/transcribe_api.dart';
 import '../models/attachment.dart';
 import '../models/chat.dart';
 import '../models/message.dart';
+import '../models/stream_element.dart';
 import 'auth_service.dart';
 import 'chat_repository.dart';
+import 'stream_buffer_processor.dart';
 
 class ChatService extends ChangeNotifier {
   ChatService({
@@ -37,6 +39,7 @@ class ChatService extends ChangeNotifier {
   Timer? _streamTimer;
   String? _currentFlowId;
   String? _activeGenerationId;
+  final Map<String, StreamBufferProcessor> _streamProcessors = {};
 
   List<Chat> get chats => _chats;
   Chat? get activeChat => _activeChat;
@@ -356,6 +359,7 @@ class ChatService extends ChangeNotifier {
     );
     if (streaming.id.isNotEmpty) {
       streaming.isStreaming = false;
+      _streamProcessors.remove(streaming.id);
       _repo.updateMessage(streaming);
     }
     notifyListeners();
@@ -399,6 +403,7 @@ class ChatService extends ChangeNotifier {
 
     await _repo.addMessage(assistantMessage);
     _messages.add(assistantMessage);
+    _streamProcessors[assistantMessage.id] = StreamBufferProcessor();
 
     _isGenerating = true;
     _currentFlowId = _uuid.v4();
@@ -435,6 +440,7 @@ class ChatService extends ChangeNotifier {
             final chunk = event.text ?? event.rawData ?? '';
             if (chunk.isEmpty) return;
             assistantMessage.content += chunk;
+            _applyStreamChunkToMessage(assistantMessage, chunk);
             _repo.updateMessage(assistantMessage);
             notifyListeners();
             break;
@@ -522,6 +528,7 @@ class ChatService extends ChangeNotifier {
     }
 
     assistantMessage.isStreaming = false;
+    _streamProcessors.remove(assistantMessage.id);
     _repo.updateMessage(assistantMessage);
 
     _isGenerating = false;
@@ -548,9 +555,51 @@ class ChatService extends ChangeNotifier {
     }
   }
 
+  void _applyStreamChunkToMessage(Message message, String chunk) {
+    final processor = _streamProcessors.putIfAbsent(
+        message.id, () => StreamBufferProcessor());
+    final newElements = processor.processChunk(chunk);
+    if (newElements.isEmpty) return;
+
+    for (final element in newElements) {
+      _mergeStreamElement(message.streamElements, element);
+    }
+  }
+
+  void _mergeStreamElement(List<StreamElement> target, StreamElement incoming) {
+    if (target.isEmpty) {
+      target.add(incoming);
+      return;
+    }
+
+    final last = target.last;
+
+    // text chunk is emitted incrementally; merge into the previous open text block.
+    if (incoming.type == StreamElementType.text &&
+        last.type == StreamElementType.text &&
+        !last.isComplete) {
+      last.content += incoming.content;
+      last.isComplete = incoming.isComplete;
+      return;
+    }
+
+    // thinking incomplete chunks may be re-emitted as snapshots; replace the pending one.
+    if (incoming.type == StreamElementType.thinking &&
+        last.type == StreamElementType.thinking &&
+        !last.isComplete) {
+      last.content = incoming.content;
+      last.isComplete = incoming.isComplete;
+      last.metadata = incoming.metadata;
+      return;
+    }
+
+    target.add(incoming);
+  }
+
   @override
   void dispose() {
     _streamTimer?.cancel();
+    _streamProcessors.clear();
     _codingStreamClient.dispose();
     _transcribeClient.dispose();
     super.dispose();

@@ -80,11 +80,20 @@ class _ChatScreenState extends State<ChatScreen> {
     });
   }
 
+  void _dismissKeyboard() {
+    final currentFocus = FocusScope.of(context);
+    if (!currentFocus.hasPrimaryFocus && currentFocus.focusedChild != null) {
+      currentFocus.unfocus();
+    }
+  }
+
   Future<void> _pickFromCamera() async {
     final picker = ImagePicker();
-    final photo = await picker.pickImage(source: ImageSource.camera, imageQuality: 80);
+    final photo =
+        await picker.pickImage(source: ImageSource.camera, imageQuality: 80);
     if (photo == null) return;
-    await _addAttachment(File(photo.path), AttachmentType.image, mime: 'image/jpeg');
+    await _addAttachment(File(photo.path), AttachmentType.image,
+        mime: 'image/jpeg');
   }
 
   Future<void> _pickFromGallery() async {
@@ -110,7 +119,8 @@ class _ChatScreenState extends State<ChatScreen> {
     }
 
     for (final photo in photosToAdd) {
-      await _addAttachment(File(photo.path), AttachmentType.image, mime: 'image/jpeg');
+      await _addAttachment(File(photo.path), AttachmentType.image,
+          mime: 'image/jpeg');
     }
   }
 
@@ -167,14 +177,16 @@ class _ChatScreenState extends State<ChatScreen> {
     }
   }
 
-  Future<void> _addAttachment(File file, AttachmentType type, {required String mime}) async {
+  Future<void> _addAttachment(File file, AttachmentType type,
+      {required String mime}) async {
     final dir = await getApplicationDocumentsDirectory();
     final targetDir = Directory(p.join(dir.path, 'attachments'));
     if (!await targetDir.exists()) {
       await targetDir.create(recursive: true);
     }
     final filename = p.basename(file.path);
-    final target = File(p.join(targetDir.path, '${DateTime.now().millisecondsSinceEpoch}_$filename'));
+    final target = File(p.join(
+        targetDir.path, '${DateTime.now().millisecondsSinceEpoch}_$filename'));
     await file.copy(target.path);
 
     setState(() {
@@ -207,14 +219,16 @@ class _ChatScreenState extends State<ChatScreen> {
       type: FileType.custom,
       allowedExtensions: ['mp3', 'wav', 'm4a', 'flac', 'ogg', 'webm'],
     );
-    
-    if (result == null || result.files.isEmpty || result.files.first.path == null) {
+
+    if (result == null ||
+        result.files.isEmpty ||
+        result.files.first.path == null) {
       return;
     }
 
     final audioFile = File(result.files.first.path!);
     final fileSize = await audioFile.length();
-    
+
     // 检查文件大小 (25MB = 25 * 1024 * 1024)
     if (fileSize > 25 * 1024 * 1024) {
       if (!mounted) return;
@@ -235,7 +249,7 @@ class _ChatScreenState extends State<ChatScreen> {
   Future<void> _onRecordingComplete(String filePath) async {
     final audioFile = File(filePath);
     final fileSize = await audioFile.length();
-    
+
     // 检查文件大小
     if (fileSize > 25 * 1024 * 1024) {
       if (!mounted) return;
@@ -252,7 +266,8 @@ class _ChatScreenState extends State<ChatScreen> {
 
   void _toggleInputMode() {
     setState(() {
-      _inputMode = _inputMode == InputMode.voice ? InputMode.text : InputMode.voice;
+      _inputMode =
+          _inputMode == InputMode.voice ? InputMode.text : InputMode.voice;
     });
   }
 
@@ -312,7 +327,8 @@ class _ChatScreenState extends State<ChatScreen> {
             final attachment = _recentUploads[index];
             return ListTile(
               leading: attachment.type == AttachmentType.image
-                  ? Image.file(File(attachment.path), width: 40, height: 40, fit: BoxFit.cover)
+                  ? Image.file(File(attachment.path),
+                      width: 40, height: 40, fit: BoxFit.cover)
                   : const Icon(Icons.insert_drive_file),
               title: Text(attachment.name),
               onTap: () {
@@ -365,54 +381,84 @@ class _ChatScreenState extends State<ChatScreen> {
           ),
         ],
       ),
-      body: Column(
-        children: [
-          if (!_isFullscreenInput)
-            Expanded(
-              child: messages.isEmpty
-                  ? Container(
-                      color: Colors.white,
-                      child: const Center(
-                        child: Text(
-                          '开始新对话',
-                          style: TextStyle(
-                            fontSize: 18,
-                            color: Colors.grey,
-                            fontWeight: FontWeight.w500,
+      body: GestureDetector(
+        behavior: HitTestBehavior.translucent,
+        onTap: _dismissKeyboard,
+        child: Column(
+          children: [
+            if (!_isFullscreenInput)
+              Expanded(
+                child: messages.isEmpty
+                    ? Container(
+                        color: Colors.white,
+                        child: const Center(
+                          child: Text(
+                            '开始新对话',
+                            style: TextStyle(
+                              fontSize: 18,
+                              color: Colors.grey,
+                              fontWeight: FontWeight.w500,
+                            ),
                           ),
                         ),
-                      ),
-                    )
-                  : ListView.builder(
-                      controller: _scrollController,
-                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-                      itemCount: messages.length,
-                      itemBuilder: (context, index) {
-                        final message = messages[index];
-                        return MessageBubble(
-                        message: message,
-                        audioPlayer: _audioPlayer,
-                        onCopy: () {
-                          Clipboard.setData(ClipboardData(text: message.content));
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            const SnackBar(content: Text('Message copied to clipboard.')),
+                      )
+                    : ListView.builder(
+                        controller: _scrollController,
+                        keyboardDismissBehavior:
+                            ScrollViewKeyboardDismissBehavior.onDrag,
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 16, vertical: 12),
+                        itemCount: messages.length,
+                        itemBuilder: (context, index) {
+                          final message = messages[index];
+                          return MessageBubble(
+                            message: message,
+                            audioPlayer: _audioPlayer,
+                            onCopy: () {
+                              Clipboard.setData(
+                                  ClipboardData(text: message.content));
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                const SnackBar(
+                                    content:
+                                        Text('Message copied to clipboard.')),
+                              );
+                            },
+                            onRetry: message.role == MessageRole.assistant
+                                ? () => chat.retryLastUserMessage()
+                                : null,
                           );
                         },
-                        onRetry: message.role == MessageRole.assistant
-                            ? () => chat.retryLastUserMessage()
-                            : null,
-                      );
-                    },
-                    ),
-            ),
-          if (!_isFullscreenInput && _pendingAttachments.isNotEmpty)
-            AttachmentTray(
-              attachments: _pendingAttachments,
-              onRemove: _removeAttachment,
-            ),
-          if (_isFullscreenInput)
-            Expanded(
-              child: InputBar.withRecorder(
+                      ),
+              ),
+            if (!_isFullscreenInput && _pendingAttachments.isNotEmpty)
+              AttachmentTray(
+                attachments: _pendingAttachments,
+                onRemove: _removeAttachment,
+              ),
+            if (_isFullscreenInput)
+              Expanded(
+                child: InputBar.withRecorder(
+                  mode: _inputMode,
+                  controller: _textController,
+                  isGenerating: chat.isGenerating,
+                  onSend: _sendMessage,
+                  onStop: chat.stopGeneration,
+                  onToggleMode: _toggleInputMode,
+                  onPickMedia: _showMediaPicker,
+                  onPickFiles: _pickFiles,
+                  onVoiceSend: _sendVoiceMessage,
+                  recorder: _audioRecorder,
+                  onRecordingComplete: _onRecordingComplete,
+                  isFullscreen: true,
+                  onToggleFullscreen: () {
+                    setState(() {
+                      _isFullscreenInput = false;
+                    });
+                  },
+                ),
+              )
+            else
+              InputBar.withRecorder(
                 mode: _inputMode,
                 controller: _textController,
                 isGenerating: chat.isGenerating,
@@ -424,35 +470,15 @@ class _ChatScreenState extends State<ChatScreen> {
                 onVoiceSend: _sendVoiceMessage,
                 recorder: _audioRecorder,
                 onRecordingComplete: _onRecordingComplete,
-                isFullscreen: true,
+                isFullscreen: false,
                 onToggleFullscreen: () {
                   setState(() {
-                    _isFullscreenInput = false;
+                    _isFullscreenInput = true;
                   });
                 },
               ),
-            )
-          else
-            InputBar.withRecorder(
-              mode: _inputMode,
-              controller: _textController,
-              isGenerating: chat.isGenerating,
-              onSend: _sendMessage,
-              onStop: chat.stopGeneration,
-              onToggleMode: _toggleInputMode,
-              onPickMedia: _showMediaPicker,
-              onPickFiles: _pickFiles,
-              onVoiceSend: _sendVoiceMessage,
-              recorder: _audioRecorder,
-              onRecordingComplete: _onRecordingComplete,
-              isFullscreen: false,
-              onToggleFullscreen: () {
-                setState(() {
-                  _isFullscreenInput = true;
-                });
-              },
-            ),
-        ],
+          ],
+        ),
       ),
     );
   }
