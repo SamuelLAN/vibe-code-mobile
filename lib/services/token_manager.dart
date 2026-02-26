@@ -186,6 +186,8 @@ class TokenManager extends ChangeNotifier {
   Future<void> _doRefresh() async {
     if (_isRefreshing || _tokenInfo == null) return;
 
+    debugPrint('Attempting token refresh with refresh_token: ${_tokenInfo!.refreshToken}');
+
     _isRefreshing = true;
 
     try {
