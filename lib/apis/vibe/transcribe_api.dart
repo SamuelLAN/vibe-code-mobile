@@ -40,12 +40,12 @@ class TranscribeApiClient {
 
   String get _baseUrl => ApiConfig.codeBaseUrl;
 
-  /// æµå¼è½¬åé³é¢
+  /// 流式转写音频
   ///
-  /// [audioFile] - é³é¢æä»¶
-  /// [accessToken] - è®¿é®ä»¤ç
-  /// [logId] - å¯éçæ¥å¿ ID
-  /// [onEvent] - äºä»¶çå¬åè°
+  /// [audioFile] - 音频文件
+  /// [accessToken] - 访问令牌
+  /// [logId] - 可选的日志 ID
+  /// [onEvent] - 事件监听回调
   Future<void> transcribeStream({
     required File audioFile,
     required String accessToken,
@@ -54,12 +54,12 @@ class TranscribeApiClient {
   }) async {
     final uri = Uri.parse('$_baseUrl/vibe/transcribe/stream');
 
-    // æ£æ¥é³é¢æä»¶æ¯å¦å­å¨
+    // 检查音频文件是否存在
     if (!await audioFile.exists()) {
-      debugPrint('[TranscribeApi] é³é¢æä»¶ä¸å­å¨: ${audioFile.path}');
+      debugPrint('[TranscribeApi] 音频文件不存在: ${audioFile.path}');
       onEvent(TranscribeEvent(
         type: TranscribeEventType.error,
-        error: 'é³é¢æä»¶ä¸å­å¨',
+        error: '音频文件不存在',
       ));
       return;
     }
@@ -68,26 +68,37 @@ class TranscribeApiClient {
     final fileExt = audioFile.path.split('.').last.toLowerCase();
     final mimeType = _getMimeType(audioFile.path);
 
-    debugPrint('[TranscribeApi] é³é¢æä»¶è¯¦æ:');
-    debugPrint('[TranscribeApi]   - è·¯å¾: ${audioFile.path}');
-    debugPrint('[TranscribeApi]   - å¤§å°: $fileSize bytes');
-    debugPrint('[TranscribeApi]   - æ©å±å: $fileExt');
-    debugPrint('[TranscribeApi]   - MIMEç±»å: $mimeType');
+    debugPrint('[TranscribeApi] 音频文件详情:');
+    debugPrint('[TranscribeApi]   - 路径: ${audioFile.path}');
+    debugPrint('[TranscribeApi]   - 大小: $fileSize bytes');
+    debugPrint('[TranscribeApi]   - 扩展名: $fileExt');
+    debugPrint('[TranscribeApi]   - MIME类型: $mimeType');
 
-    // éªè¯æä»¶å¤´
+    // 验证文件签名（WAV 检查 RIFF；M4A 通常在 offset 4 看到 ftyp）
     try {
-      final bytes = await audioFile.openRead(0, 4).first;
-      final header = String.fromCharCodes(bytes);
-      debugPrint('[TranscribeApi] æä»¶å¤´: $header (ææ: RIFF for WAV)');
-      if (header != 'RIFF') {
-        debugPrint('[TranscribeApi] è­¦å: æä»¶å¤´ä¸æ¯ RIFF, å®éæ¯ $header');
+      final bytes = await audioFile.openRead(0, 12).fold<List<int>>(<int>[], (acc, chunk) {
+        if (acc.length >= 12) return acc;
+        acc.addAll(chunk);
+        return acc.length > 12 ? acc.sublist(0, 12) : acc;
+      });
+      final ascii = bytes.map((b) => (b >= 32 && b <= 126) ? String.fromCharCode(b) : '.').join();
+      debugPrint('[TranscribeApi] 文件签名(ascii): $ascii');
+      if (fileExt == 'wav' && bytes.length >= 4) {
+        final header = String.fromCharCodes(bytes.take(4));
+        debugPrint('[TranscribeApi] WAV 文件头: $header (期望 RIFF)');
+        if (header != 'RIFF') {
+          debugPrint('[TranscribeApi] 警告: WAV 文件头不是 RIFF');
+        }
+      } else if (fileExt == 'm4a' && bytes.length >= 8) {
+        final brand = String.fromCharCodes(bytes.skip(4).take(4));
+        debugPrint('[TranscribeApi] M4A 品牌字段(offset4): $brand (常见 ftyp)');
       }
     } catch (e) {
-      debugPrint('[TranscribeApi] æ æ³è¯»åæä»¶å¤´: $e');
+      debugPrint('[TranscribeApi] 无法读取文件头: $e');
     }
 
     if (fileSize == 0) {
-      debugPrint('[TranscribeApi] è­¦å: é³é¢æä»¶ä¸ºç©º!');
+      debugPrint('[TranscribeApi] 警告: 音频文件为空!');
     }
 
     final request = http.MultipartRequest('POST', uri);
@@ -99,15 +110,15 @@ class TranscribeApiClient {
       debugPrint('[TranscribeApi] log_id: $logId');
     }
 
-    debugPrint('[TranscribeApi] å¼å§åéè½¬åè¯·æ±...');
+    debugPrint('[TranscribeApi] 开始发送转写请求...');
 
     try {
       final streamedResponse = await _client.send(request);
       final response = await http.Response.fromStream(streamedResponse);
 
-      debugPrint('[TranscribeApi] æ¶å°ååº, statusCode: ${response.statusCode}');
+      debugPrint('[TranscribeApi] 收到响应, statusCode: ${response.statusCode}');
       if (response.statusCode != 200) {
-        debugPrint('[TranscribeApi] ååº body: ${response.body}');
+        debugPrint('[TranscribeApi] 响应 body: ${response.body}');
       }
 
       // 解析 SSE 流
@@ -125,7 +136,7 @@ class TranscribeApiClient {
           final json = jsonDecode(data) as Map<String, dynamic>;
           final code = json['code'] as int?;
 
-          // å¼å®¹ code: 0 å code: 200 ä¸¤ç§æåååº
+          // 兼容 code: 0 和 code: 200 两种成功响应
           if (code == 0 || code == 200) {
             final text = json['data'] as String?;
             final eventLogId = json['log_id'] as String?;

@@ -713,7 +713,7 @@ class _AttachmentRow extends StatelessWidget {
   }
 }
 
-/// è¯­é³æ¶æ¯ç»ä»¶ï¼æ¾ç¤ºè½¬å½ç¶æåæ­æ¾æé®
+/// 语音消息组件，显示转录状态和播放按钮
 class _VoiceMessageWidget extends StatefulWidget {
   const _VoiceMessageWidget({required this.attachment, this.audioPlayer});
 
@@ -858,13 +858,13 @@ class _VoiceMessageWidgetState extends State<_VoiceMessageWidget> {
       color: Theme.of(context).colorScheme.onSurface,
     );
 
-    // å¦ææ­£å¨æ­æ¾ï¼æ¾ç¤ºæ­æ¾ç¶æ
+    // 如果正在播放，显示播放状态
     if (isPlaying) {
       return Row(
         children: [
           const Icon(Icons.volume_up, size: 16),
           const SizedBox(width: 4),
-          Text('æ­æ¾ä¸­...', style: textStyle),
+          Text('播放中...', style: textStyle),
         ],
       );
     }
@@ -882,7 +882,7 @@ class _VoiceMessageWidgetState extends State<_VoiceMessageWidget> {
               ),
             ),
             const SizedBox(width: 6),
-            Text('è½¬å½ä¸­...', style: textStyle),
+            Text('转录中...', style: textStyle),
           ],
         );
       case TranscriptionStatus.completed:
@@ -892,7 +892,7 @@ class _VoiceMessageWidgetState extends State<_VoiceMessageWidget> {
             const SizedBox(width: 4),
             Expanded(
               child: Text(
-                widget.attachment.transcribedText ?? 'è½¬å½å®æ',
+                widget.attachment.transcribedText ?? '转录完成',
                 style: textStyle,
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
@@ -907,7 +907,7 @@ class _VoiceMessageWidgetState extends State<_VoiceMessageWidget> {
             const SizedBox(width: 4),
             Expanded(
               child: Text(
-                'è½¬å½å¤±è´¥',
+                '转录失败',
                 style: textStyle.copyWith(color: Colors.red),
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
@@ -916,7 +916,7 @@ class _VoiceMessageWidgetState extends State<_VoiceMessageWidget> {
           ],
         );
       default:
-        // æ²¡ææ­æ¾å¨æ¶æ¾ç¤ºåå§ç¶æï¼ææ­æ¾å¨æ¶æ¾ç¤ºå¯ç¹å»æç¤º
+        // 没有播放器时显示原始状态，有播放器时显示可点击提示
         if (widget.audioPlayer != null) {
           return Row(
             children: [
@@ -924,7 +924,7 @@ class _VoiceMessageWidgetState extends State<_VoiceMessageWidget> {
               const SizedBox(width: 4),
               Expanded(
                 child: Text(
-                  'ç¹å»æ­æ¾',
+                  '点击播放',
                   style: textStyle,
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
@@ -933,11 +933,11 @@ class _VoiceMessageWidgetState extends State<_VoiceMessageWidget> {
             ],
           );
         }
-        return Text('è¯­é³æ¶æ¯', style: textStyle);
+        return Text('语音消息', style: textStyle);
     }
   }
 
-  // ä¿çåæçç¶æå¾æ æ¹æ³ç¨äºæ²¡ææ­æ¾å¨çåºæ¯
+  // 保留原有的状态图标方法用于没有播放器的场景
   Widget _buildStatusIcon(BuildContext context) {
     switch (widget.attachment.transcriptionStatus) {
       case TranscriptionStatus.loading:

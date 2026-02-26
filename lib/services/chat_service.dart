@@ -127,43 +127,54 @@ class ChatService extends ChangeNotifier {
     await _generateAssistantResponse(text);
   }
 
-  /// åéè¯­é³æ¶æ¯å¹¶è¿è¡è½¬å
+  /// 发送语音消息并进行转写
   Future<void> sendVoiceMessage(File audioFile) async {
     if (_activeChat == null) return;
     _error = null;
 
-    debugPrint('[ChatService] å¼å§å¤çè¯­é³æ¶æ¯, æä»¶: ${audioFile.path}');
+    debugPrint('[ChatService] 开始处理语音消息, 文件: ${audioFile.path}');
 
     // æ£æ¥æä»¶æ¯å¦å­å¨
     if (!await audioFile.exists()) {
-      debugPrint('[ChatService] éè¯¯: é³é¢æä»¶ä¸å­å¨');
+      debugPrint('[ChatService] 错误: 音频文件不存在');
       return;
     }
 
     final fileSize = await audioFile.length();
     final fileExt = audioFile.path.split('.').last.toLowerCase();
     final mimeType = _getMimeType(audioFile.path);
-    debugPrint('[ChatService] é³é¢æä»¶ä¿¡æ¯:');
-    debugPrint('[ChatService]   - è·¯å¾: ${audioFile.path}');
-    debugPrint('[ChatService]   - å¤§å°: $fileSize bytes');
-    debugPrint('[ChatService]   - æ©å±å: $fileExt');
-    debugPrint('[ChatService]   - MIMEç±»å: $mimeType');
+    debugPrint('[ChatService] 音频文件信息:');
+    debugPrint('[ChatService]   - 路径: ${audioFile.path}');
+    debugPrint('[ChatService]   - 大小: $fileSize bytes');
+    debugPrint('[ChatService]   - 扩展名: $fileExt');
+    debugPrint('[ChatService]   - MIME类型: $mimeType');
 
-    // éªè¯æä»¶æ ¼å¼
-    if (fileExt != 'wav') {
-      debugPrint('[ChatService] è­¦å: æä»¶æ©å±åä¸æ¯ .wav, å¯è½æ¯: $fileExt');
+    // 验证文件格式（m4a/wav 都可接受）
+    if (fileExt != 'wav' && fileExt != 'm4a') {
+      debugPrint('[ChatService] 警告: 语音文件扩展名不是常见格式(wav/m4a)，实际: $fileExt');
     }
 
-    // è¯»åæä»¶å¤´éªè¯æ ¼å¼
+    // 读取文件头验证格式（仅对 WAV 强制校验 RIFF）
     try {
-      final bytes = await audioFile.openRead(0, 4).first;
-      final header = String.fromCharCodes(bytes);
-      debugPrint('[ChatService] æä»¶å¤´: $header (ææ: RIFF for WAV)');
-      if (header != 'RIFF') {
-        debugPrint('[ChatService] è­¦å: æä»¶å¤´ä¸æ¯ RIFF, å¯è½æ¯ $header');
+      final bytes = await audioFile.openRead(0, 12).fold<List<int>>(<int>[], (acc, chunk) {
+        if (acc.length >= 12) return acc;
+        acc.addAll(chunk);
+        return acc.length > 12 ? acc.sublist(0, 12) : acc;
+      });
+      final ascii = bytes.map((b) => (b >= 32 && b <= 126) ? String.fromCharCode(b) : '.').join();
+      debugPrint('[ChatService] 文件签名(ascii): $ascii');
+      if (fileExt == 'wav' && bytes.length >= 4) {
+        final header = String.fromCharCodes(bytes.take(4));
+        debugPrint('[ChatService] WAV 文件头: $header (期望 RIFF)');
+        if (header != 'RIFF') {
+          debugPrint('[ChatService] 警告: WAV 文件头不是 RIFF');
+        }
+      } else if (fileExt == 'm4a' && bytes.length >= 8) {
+        final brand = String.fromCharCodes(bytes.skip(4).take(4));
+        debugPrint('[ChatService] M4A 品牌字段(offset4): $brand (常见 ftyp)');
       }
     } catch (e) {
-      debugPrint('[ChatService] æ æ³è¯»åæä»¶å¤´: $e');
+      debugPrint('[ChatService] 无法读取文件头: $e');
     }
 
     final messageId = _uuid.v4();

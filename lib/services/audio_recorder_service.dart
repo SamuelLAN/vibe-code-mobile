@@ -8,8 +8,14 @@ import 'package:record/record.dart';
 
 /// 检测是否在 iOS 模拟器上
 bool get isIOSSimulator {
-  return !kIsWeb && Platform.isIOS &&
-         defaultTargetPlatform == TargetPlatform.iOS;
+  if (kIsWeb || !Platform.isIOS || defaultTargetPlatform != TargetPlatform.iOS) {
+    return false;
+  }
+
+  // 真机和模拟器都会满足 Platform.isIOS，因此需要看 iOS Simulator 注入的环境变量。
+  final env = Platform.environment;
+  return env.containsKey('SIMULATOR_DEVICE_NAME') ||
+      env.containsKey('SIMULATOR_UDID');
 }
 
 /// 录音服务
@@ -49,14 +55,13 @@ class AudioRecorderService {
 
     debugPrint('开始录音...');
 
+    if (isIOSSimulator) {
+      debugPrint('iOS 模拟器不支持真实麦克风录音，生成模拟 WAV 文件用于调试');
+      return _createSimulatorAudioFile();
+    }
+
     // 检查权限
     if (!await hasPermission()) {
-      // 在模拟器上，权限会被拒绝
-      if (isIOSSimulator) {
-        debugPrint('iOS 模拟器检测到，模拟器不支持真实录音功能');
-        return null;
-      }
-
       debugPrint('请求麦克风权限...');
       final granted = await requestPermission();
       if (!granted) {
@@ -73,37 +78,30 @@ class AudioRecorderService {
       await voiceDir.create(recursive: true);
     }
 
+    final output = await _selectRecordingOutput();
     final timestamp = DateTime.now().millisecondsSinceEpoch;
-    _currentFilePath = p.join(voiceDir.path, 'voice_$timestamp.m4a');
+    _currentFilePath = p.join(voiceDir.path, 'voice_$timestamp${output.extension}');
 
-    debugPrint('[AudioRecorder] å½é³æä»¶è·¯å¾: $_currentFilePath');
-    debugPrint('[AudioRecorder] å¼å§å½é³, ä½¿ç¨ WAV æ ¼å¼ (PCM 16-bit, 16kHz, mono)');
+    debugPrint('[AudioRecorder] 录音文件路径: $_currentFilePath');
+    debugPrint('[AudioRecorder] 开始录音，编码=${output.encoderLabel}, 声道=1');
 
-    // å¼å§å½é³
+    // 开始录音
     try {
-      // ä½¿ç¨ WAV (PCM 16-bit) ç¼ç ä»¥ç¡®ä¿åç«¯è½å¤æ­£ç¡®æ­æ¾åè½¬å
-      // 16kHz æ¯è¯­é³è¯å«æ åçéæ ·ç
-      // mono (åå£°é) å¯¹è¯­é³è¯å«è¶³å¤ä¸æä»¶æ´å°
       await _recorder.start(
-        const RecordConfig(
-          encoder: AudioEncoder.aacLc,
-          bitRate: 128000,
-          sampleRate: 16000,
-          numChannels: 1,
-        ),
+        output.config,
         path: _currentFilePath!,
       );
 
       _isRecording = true;
-      debugPrint('[AudioRecorder] å½é³å·²å¼å§, isRecording: $_isRecording');
+      debugPrint('[AudioRecorder] 录音已开始, isRecording: $_isRecording');
       return _currentFilePath;
     } catch (e) {
-      debugPrint('[AudioRecorder] å¼å§å½é³å¤±è´¥: $e');
+      debugPrint('[AudioRecorder] 开始录音失败: $e');
       return null;
     }
   }
 
-  /// ä¸º iOS æ¨¡æå¨åå»ºæ¨¡æé³é¢æä»¶
+  /// 为 iOS 模拟器创建模拟音频文件
   Future<String?> _createSimulatorAudioFile() async {
     final dir = await getApplicationDocumentsDirectory();
     final voiceDir = Directory(p.join(dir.path, 'voice'));
@@ -112,9 +110,9 @@ class AudioRecorderService {
     }
 
     final timestamp = DateTime.now().millisecondsSinceEpoch;
-    final filePath = p.join(voiceDir.path, 'voice_$timestamp.m4a');
+    final filePath = p.join(voiceDir.path, 'voice_$timestamp.wav');
 
-    // åå»ºä¸ä¸ªææç WAV æä»¶ (åå«æå° PCM é³é¢æ°æ®)
+    // 创建一个有效的 WAV 文件（包含最小 PCM 音频数据）
     final file = File(filePath);
     final minimalWav = _getMinimalWavData();
     await file.writeAsBytes(minimalWav);
@@ -122,12 +120,12 @@ class AudioRecorderService {
     _currentFilePath = filePath;
     _isRecording = true;
 
-    debugPrint('[AudioRecorder] åå»ºæ¨¡æé³é¢æä»¶: $filePath, å¤§å°: ${minimalWav.length} bytes');
+    debugPrint('[AudioRecorder] 创建模拟音频文件: $filePath, 大小: ${minimalWav.length} bytes');
     return filePath;
   }
 
-  /// çææå°ææç WAV æ°æ® (åå« PCM éé³)
-  /// WAV æä»¶ç»æ: RIFF header + fmt chunk + data chunk
+  /// 生成最小有效的 WAV 数据（包含 PCM 静音）
+  /// WAV 文件结构: RIFF header + fmt chunk + data chunk
   List<int> _getMinimalWavData() {
     const sampleRate = 16000;
     const numChannels = 1;
@@ -183,18 +181,18 @@ class AudioRecorderService {
     return wav;
   }
 
-  /// åæ­¢å½é³
-  /// è¿åå½é³æä»¶è·¯å¾
+  /// 停止录音
+  /// 返回录音文件路径
   Future<String?> stopRecording() async {
     if (!_isRecording) return null;
 
-    debugPrint('[AudioRecorder] åæ­¢å½é³...');
+    debugPrint('[AudioRecorder] 停止录音...');
 
-    // å¦ææ¯æ¨¡æå¨ï¼ä¸è¦è°ç¨ recorder.stop()
+    // 如果是模拟器，不要调用 recorder.stop()
     if (isIOSSimulator) {
       _isRecording = false;
       final resultPath = _currentFilePath;
-      debugPrint('[AudioRecorder] æ¨¡æå¨å½é³æä»¶è·¯å¾: $resultPath');
+      debugPrint('[AudioRecorder] 模拟器录音文件路径: $resultPath');
       _currentFilePath = null;
       return resultPath;
     }
@@ -204,24 +202,21 @@ class AudioRecorderService {
 
     final resultPath = path ?? _currentFilePath;
 
-    // éªè¯å½é³æä»¶æææ§
+    // 验证录音文件有效性
     if (resultPath != null) {
       final file = File(resultPath);
       if (await file.exists()) {
         final fileSize = await file.length();
         final fileExt = p.extension(resultPath).toLowerCase();
-        debugPrint('[AudioRecorder] å½é³å®æ, æä»¶è·¯å¾: $resultPath');
-        debugPrint('[AudioRecorder] æä»¶æ©å±å: $fileExt, å¤§å°: $fileSize bytes');
+        debugPrint('[AudioRecorder] 录音完成, 文件路径: $resultPath');
+        debugPrint('[AudioRecorder] 文件扩展名: $fileExt, 大小: $fileSize bytes');
         if (fileSize == 0) {
-          debugPrint('[AudioRecorder] è­¦å: å½é³æä»¶ä¸ºç©º!');
+          debugPrint('[AudioRecorder] 警告: 录音文件为空!');
         } else {
-          // éªè¯æä»¶å¤´
-          final bytes = await file.openRead(0, 4).first;
-          final header = String.fromCharCodes(bytes);
-          debugPrint('[AudioRecorder] æä»¶å¤´: $header (ææ: RIFF for WAV)');
+          await _logAudioFileSignature(file, fileExt);
         }
       } else {
-        debugPrint('[AudioRecorder] è­¦å: å½é³æä»¶ä¸å­å¨: $resultPath');
+        debugPrint('[AudioRecorder] 警告: 录音文件不存在: $resultPath');
       }
     }
 
@@ -229,20 +224,20 @@ class AudioRecorderService {
     return resultPath;
   }
 
-  /// åæ¶å½é³
+  /// 取消录音
   Future<void> cancelRecording() async {
     if (!_isRecording) return;
 
-    debugPrint('[AudioRecorder] åæ¶å½é³...');
+    debugPrint('[AudioRecorder] 取消录音...');
 
-    // å¦ææ¯æ¨¡æå¨ï¼ç´æ¥æ¸çç¶æ
+    // 如果是模拟器，直接清理状态
     if (isIOSSimulator) {
       _isRecording = false;
       if (_currentFilePath != null) {
         final file = File(_currentFilePath!);
         if (await file.exists()) {
           await file.delete();
-          debugPrint('[AudioRecorder] å·²å é¤æ¨¡æå½é³æä»¶: $_currentFilePath');
+          debugPrint('[AudioRecorder] 已删除模拟录音文件: $_currentFilePath');
         }
       }
       _currentFilePath = null;
@@ -252,12 +247,12 @@ class AudioRecorderService {
     await _recorder.stop();
     _isRecording = false;
 
-    // å é¤ä¸´æ¶æä»¶
+    // 删除临时文件
     if (_currentFilePath != null) {
       final file = File(_currentFilePath!);
       if (await file.exists()) {
         await file.delete();
-        debugPrint('[AudioRecorder] å·²å é¤ä¸´æ¶å½é³æä»¶: $_currentFilePath');
+        debugPrint('[AudioRecorder] 已删除临时录音文件: $_currentFilePath');
       }
     }
     _currentFilePath = null;
@@ -270,4 +265,74 @@ class AudioRecorderService {
     }
     _recorder.dispose();
   }
+
+  Future<_RecordingOutput> _selectRecordingOutput() async {
+    // `record` 官方文档说明采样率/码率需要谨慎配置；iOS 上优先使用平台默认 AAC/M4A，兼容性更好。
+    final preferAac = Platform.isIOS || Platform.isMacOS;
+    if (preferAac && await _recorder.isEncoderSupported(AudioEncoder.aacLc)) {
+      return const _RecordingOutput(
+        extension: '.m4a',
+        encoderLabel: 'aacLc (m4a)',
+        config: RecordConfig(
+          encoder: AudioEncoder.aacLc,
+          numChannels: 1,
+        ),
+      );
+    }
+
+    if (await _recorder.isEncoderSupported(AudioEncoder.wav)) {
+      return const _RecordingOutput(
+        extension: '.wav',
+        encoderLabel: 'wav (pcm16)',
+        config: RecordConfig(
+          encoder: AudioEncoder.wav,
+          sampleRate: 16000,
+          numChannels: 1,
+        ),
+      );
+    }
+
+    return const _RecordingOutput(
+      extension: '.m4a',
+      encoderLabel: 'aacLc fallback (m4a)',
+      config: RecordConfig(
+        encoder: AudioEncoder.aacLc,
+        numChannels: 1,
+      ),
+    );
+  }
+
+  Future<void> _logAudioFileSignature(File file, String fileExt) async {
+    final bytes = await file.openRead(0, 12).fold<List<int>>(<int>[], (acc, chunk) {
+      if (acc.length >= 12) return acc;
+      acc.addAll(chunk);
+      if (acc.length > 12) {
+        return acc.sublist(0, 12);
+      }
+      return acc;
+    });
+    final ascii = bytes.map((b) => (b >= 32 && b <= 126) ? String.fromCharCode(b) : '.').join();
+    final hex = bytes.map((b) => b.toRadixString(16).padLeft(2, '0')).join(' ');
+    debugPrint('[AudioRecorder] 文件签名: ascii=$ascii hex=$hex');
+
+    if (fileExt == '.wav' && bytes.length >= 4) {
+      final header = String.fromCharCodes(bytes.take(4));
+      debugPrint('[AudioRecorder] WAV 文件头校验: $header (期望 RIFF)');
+    } else if (fileExt == '.m4a' && bytes.length >= 8) {
+      final brand = String.fromCharCodes(bytes.skip(4).take(4));
+      debugPrint('[AudioRecorder] M4A 文件头校验: offset4=$brand (常见为 ftyp)');
+    }
+  }
+}
+
+class _RecordingOutput {
+  const _RecordingOutput({
+    required this.extension,
+    required this.encoderLabel,
+    required this.config,
+  });
+
+  final String extension;
+  final String encoderLabel;
+  final RecordConfig config;
 }

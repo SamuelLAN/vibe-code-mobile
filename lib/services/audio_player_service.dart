@@ -2,6 +2,7 @@ import 'dart:io';
 
 import 'package:flutter/foundation.dart';
 import 'package:just_audio/just_audio.dart';
+import 'package:path/path.dart' as p;
 
 /// 音频播放服务 - 提供语音消息的播放功能
 class AudioPlayerService {
@@ -55,26 +56,37 @@ class AudioPlayerService {
     }
   }
 
-  /// æ­æ¾æå®è·¯å¾çé³é¢æä»¶
-  /// å¦ææ¯åä¸ä¸ªæä»¶ï¼ååæ¢æ­æ¾/æåç¶æ
+  /// 播放指定路径的音频文件
+  /// 如果是同一个文件，则切换播放/暂停状态
   Future<void> play(String filePath) async {
     try {
-      // æ£æ¥æä»¶æ¯å¦å­å¨
+      // 检查文件是否存在
       final file = File(filePath);
       if (!await file.exists()) {
-        debugPrint('[AudioPlayerService] æ­æ¾å¤±è´¥: æä»¶ä¸å­å¨ - $filePath');
+        debugPrint('[AudioPlayerService] 播放失败: 文件不存在 - $filePath');
         return;
       }
 
-      // æ£æ¥æä»¶å¤§å°
+      // 检查文件大小
       final fileSize = await file.length();
       if (fileSize == 0) {
-        debugPrint('[AudioPlayerService] æ­æ¾å¤±è´¥: æä»¶ä¸ºç©º - $filePath');
+        debugPrint('[AudioPlayerService] 播放失败: 文件为空 - $filePath');
         return;
       }
-      debugPrint('[AudioPlayerService] æ­æ¾æä»¶: $filePath, å¤§å°: $fileSize bytes');
+      debugPrint('[AudioPlayerService] 播放文件: $filePath, 大小: $fileSize bytes');
 
-      // å¦ææ¯åä¸ä¸ªæä»¶ï¼åæ¢æ­æ¾/æå
+      final ext = p.extension(filePath).toLowerCase();
+      if (fileSize >= 4) {
+        final headerBytes = await file.openRead(0, 4).first;
+        final header = String.fromCharCodes(headerBytes);
+        if (ext == '.m4a' && header == 'RIFF') {
+          debugPrint(
+            '[AudioPlayerService] 扩展名(.m4a)与文件内容(RIFF/WAV)不一致，iOS 播放可能报 -11829',
+          );
+        }
+      }
+
+      // 如果是同一个文件，切换播放/暂停
       if (_currentFilePath == filePath) {
         if (_player.playing) {
           await _player.pause();
@@ -84,14 +96,14 @@ class AudioPlayerService {
         return;
       }
 
-      // æ­æ¾æ°æä»¶
+      // 播放新文件
       _currentFilePath = filePath;
       await _player.setFilePath(filePath);
       await _player.play();
-      debugPrint('[AudioPlayerService] å¼å§æ­æ¾é³é¢: $filePath');
+      debugPrint('[AudioPlayerService] 开始播放音频: $filePath');
     } catch (e) {
-      debugPrint('[AudioPlayerService] æ­æ¾é³é¢å¤±è´¥: $e');
-      debugPrint('[AudioPlayerService] éè¯¯è¯¦æ: æä»¶è·¯å¾=$filePath');
+      debugPrint('[AudioPlayerService] 播放音频失败: $e');
+      debugPrint('[AudioPlayerService] 错误详情: 文件路径=$filePath');
       _currentFilePath = null;
     }
   }
