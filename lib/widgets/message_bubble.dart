@@ -289,6 +289,22 @@ class _FunctionTimelineBlockState extends State<_FunctionTimelineBlock> {
   bool _expanded = false;
 
   @override
+  void initState() {
+    super.initState();
+    _expanded = _shouldDefaultExpand(widget.item);
+  }
+
+  @override
+  void didUpdateWidget(covariant _FunctionTimelineBlock oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    // For pass_coding_mind_map, call payload already contains a renderable mind map tree.
+    // Auto-expand on first appearance (especially call-only state).
+    if (!_expanded && _shouldDefaultExpand(widget.item)) {
+      _expanded = true;
+    }
+  }
+
+  @override
   Widget build(BuildContext context) {
     final summary = _buildSummary(widget.item);
     final titleColor = widget.isDark ? Colors.grey[500] : Colors.grey[700];
@@ -387,6 +403,14 @@ class _FunctionTimelineBlockState extends State<_FunctionTimelineBlock> {
             item.functionCall?.metadata?['functionName'] ??
             '')
         .toString();
+  }
+
+  bool _shouldDefaultExpand(_StreamRenderItem item) {
+    final functionName = _functionNameOfItem(item);
+    if (functionName == 'pass_coding_mind_map') {
+      return true;
+    }
+    return false;
   }
 
   _FunctionSummary _buildSummary(_StreamRenderItem item) {
