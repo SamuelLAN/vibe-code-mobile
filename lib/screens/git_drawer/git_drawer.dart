@@ -165,6 +165,7 @@ class _GitDrawerState extends State<GitDrawer> {
     final running = _runStatus.runningTaskCount > 0;
 
     return Drawer(
+      width: MediaQuery.of(context).size.width * 0.85,
       backgroundColor:
           isDark ? const Color(0xFF1E1E1E) : const Color(0xFFF5F5F5),
       child: SafeArea(
@@ -376,12 +377,17 @@ class _GitDrawerState extends State<GitDrawer> {
                 Icon(Icons.account_tree_rounded,
                     size: 14, color: theme.colorScheme.primary),
                 const SizedBox(width: 6),
-                Text(
-                  currentBranch,
-                  style: TextStyle(
-                    color: theme.colorScheme.primary,
-                    fontSize: 13,
-                    fontWeight: FontWeight.w600,
+                ConstrainedBox(
+                  constraints: const BoxConstraints(maxWidth: 140),
+                  child: Text(
+                    currentBranch,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                      color: theme.colorScheme.primary,
+                      fontSize: 13,
+                      fontWeight: FontWeight.w600,
+                    ),
                   ),
                 ),
               ],
@@ -406,7 +412,7 @@ class _GitDrawerState extends State<GitDrawer> {
                 ),
                 const SizedBox(width: 4),
                 Text(
-                  isRunning ? '运行中' : '已停止',
+                  isRunning ? 'running' : 'stopped',
                   style: TextStyle(
                     color: isRunning ? GitColors.success : Colors.grey[600],
                     fontSize: 12,
@@ -622,7 +628,7 @@ class _GitDrawerState extends State<GitDrawer> {
           ),
           const SizedBox(width: 6),
           const Text(
-            '运行中',
+            'running',
             style: TextStyle(
                 fontSize: 12,
                 color: GitColors.success,
