@@ -224,6 +224,38 @@ class GitService extends ChangeNotifier {
     );
   }
 
+  Future<String> generateCommitMessage({
+    String? projectName,
+    List<String>? filePaths,
+  }) async {
+    final effectiveProjectName = await _effectiveProjectName(projectName);
+    final mock = await _settings.getGitMockMode();
+    if (mock) {
+      _log('POST /vibe/git/change/commit/generate-message -> mock mode enabled');
+      return 'chore: update project files';
+    }
+
+    final response = await _post(
+      '/vibe/git/change/commit/generate-message',
+      body: {
+        'project_name': effectiveProjectName,
+        if (filePaths != null && filePaths.isNotEmpty) 'file_paths': filePaths,
+      },
+    );
+    if (!response.success) throw Exception(response.message);
+
+    final data = _payloadAsMap(response.details);
+    final message =
+        _readOptionalString(data, const ['message', 'commit_message', 'msg']);
+    if (message != null && message.trim().isNotEmpty) {
+      return message.trim();
+    }
+
+    final payload = _payload(response.details);
+    if (payload is String && payload.trim().isNotEmpty) return payload.trim();
+    throw Exception('未获取到 commit message');
+  }
+
   Future<List<GitCommit>> getResetCandidates({
     int limit = 20,
     String? projectName,

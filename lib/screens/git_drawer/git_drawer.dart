@@ -989,6 +989,9 @@ class _GitDrawerState extends State<GitDrawer> {
       backgroundColor: Colors.transparent,
       builder: (context) => CommitModal(
         files: _worktree.files,
+        onGenerateMessage: (filePaths) => _git.generateCommitMessage(
+          filePaths: filePaths,
+        ),
         onConfirm: (message, filePaths, addAll) async {
           Navigator.pop(context);
           await _runGitOperation(

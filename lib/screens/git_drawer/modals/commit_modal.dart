@@ -9,10 +9,12 @@ class CommitModal extends StatefulWidget {
     super.key,
     required this.files,
     required this.onConfirm,
+    required this.onGenerateMessage,
   });
 
   final List<GitWorktreeFile> files;
   final void Function(String message, List<String> filePaths, bool addAll) onConfirm;
+  final Future<String> Function(List<String> filePaths) onGenerateMessage;
 
   @override
   State<CommitModal> createState() => _CommitModalState();
@@ -22,6 +24,7 @@ class _CommitModalState extends State<CommitModal> {
   final _controller = TextEditingController();
   final _focusNode = FocusNode();
   late List<_CommitSelectionFile> _files;
+  bool _generatingMessage = false;
 
   @override
   void initState() {
@@ -62,6 +65,37 @@ class _CommitModalState extends State<CommitModal> {
     setState(() {
       _files = _files.map((f) => f.copyWith(staged: false)).toList();
     });
+  }
+
+  Future<void> _generateMessage() async {
+    if (_generatingMessage) return;
+    setState(() => _generatingMessage = true);
+    try {
+      final selectedPaths = _files.where((f) => f.staged).map((f) => f.path).toList();
+      final generated = await widget.onGenerateMessage(selectedPaths);
+      if (!mounted) return;
+      final trimmed = generated.trim();
+      if (trimmed.isEmpty) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('未生成有效的提交信息')),
+        );
+        return;
+      }
+      _controller.text = trimmed;
+      _controller.selection = TextSelection.fromPosition(
+        TextPosition(offset: _controller.text.length),
+      );
+      setState(() {});
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('生成提交信息失败: $e')),
+      );
+    } finally {
+      if (mounted) {
+        setState(() => _generatingMessage = false);
+      }
+    }
   }
 
   @override
@@ -134,6 +168,17 @@ class _CommitModalState extends State<CommitModal> {
                             borderSide: BorderSide.none,
                           ),
                           counterText: '',
+                          suffixIcon: IconButton(
+                            tooltip: '生成 Commit Message',
+                            onPressed: _generatingMessage ? null : _generateMessage,
+                            icon: _generatingMessage
+                                ? const SizedBox(
+                                    width: 18,
+                                    height: 18,
+                                    child: CircularProgressIndicator(strokeWidth: 2),
+                                  )
+                                : const Icon(Icons.auto_awesome_rounded),
+                          ),
                         ),
                       ),
                       const SizedBox(height: 12),
