@@ -3,6 +3,7 @@ import 'package:provider/provider.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../services/auth_service.dart';
+import '../services/settings_service.dart';
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
@@ -33,10 +34,20 @@ class _LoginScreenState extends State<LoginScreen> {
   Future<void> _submit() async {
     if (!_formKey.currentState!.validate()) return;
     final auth = context.read<AuthService>();
+    final settings = context.read<SettingsService>();
     final success = await auth.login(
       email: _emailController.text.trim(),
       password: _passwordController.text,
     );
+    if (success) {
+      await settings.setSelectedProjectName(_selectedProject);
+      await settings.setGitRepoPath(_repoPathForProject(_selectedProject));
+      final token = auth.accessToken;
+      if (token != null && token.isNotEmpty) {
+        await settings.setGitToken(token);
+      }
+      return;
+    }
     if (!success && mounted) {
       final error = auth.error ?? '登录失败';
       final isNetworkError = error.contains('网络连接失败');
@@ -72,6 +83,16 @@ class _LoginScreenState extends State<LoginScreen> {
           duration: const Duration(seconds: 5),
         ),
       );
+    }
+  }
+
+  String _repoPathForProject(String projectName) {
+    switch (projectName) {
+      case 'plutux-board':
+        return '/Users/samuel/Documents/github/plutux-board';
+      case 'vibe-code-mobile':
+      default:
+        return '/Users/samuel/Documents/github/vibe-code-mobile';
     }
   }
 

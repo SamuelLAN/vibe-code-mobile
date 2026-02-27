@@ -24,16 +24,17 @@ class _ResetModalState extends State<ResetModal> {
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
+    final selected = _selected;
 
     return Container(
       decoration: BoxDecoration(
         color: isDark ? const Color(0xFF1E1E1E) : Colors.white,
         borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
       ),
-      padding: EdgeInsets.only(bottom: MediaQuery.of(context).viewInsets.bottom),
+      padding:
+          EdgeInsets.only(bottom: MediaQuery.of(context).viewInsets.bottom),
       child: SafeArea(
         child: Column(
-          mainAxisSize: MainAxisSize.min,
           children: [
             Container(
               width: 36,
@@ -64,9 +65,9 @@ class _ResetModalState extends State<ResetModal> {
                 ],
               ),
             ),
-            Flexible(
-              child: SingleChildScrollView(
-                padding: const EdgeInsets.all(20),
+            Expanded(
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(20, 0, 20, 20),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
@@ -75,23 +76,32 @@ class _ResetModalState extends State<ResetModal> {
                         final isSelected = _resetType == t;
                         return Expanded(
                           child: Padding(
-                            padding: EdgeInsets.only(right: t != 'hard' ? 8 : 0),
+                            padding:
+                                EdgeInsets.only(right: t != 'hard' ? 8 : 0),
                             child: InkWell(
                               onTap: () => setState(() => _resetType = t),
                               child: Container(
-                                padding: const EdgeInsets.symmetric(vertical: 10),
+                                padding:
+                                    const EdgeInsets.symmetric(vertical: 10),
                                 decoration: BoxDecoration(
                                   color: isSelected
                                       ? (t == 'hard'
                                           ? GitColors.error.withOpacity(0.15)
-                                          : Theme.of(context).colorScheme.primary.withOpacity(0.15))
-                                      : (isDark ? Colors.white10 : Colors.grey[100]),
+                                          : Theme.of(context)
+                                              .colorScheme
+                                              .primary
+                                              .withOpacity(0.15))
+                                      : (isDark
+                                          ? Colors.white10
+                                          : Colors.grey[100]),
                                   borderRadius: BorderRadius.circular(8),
                                   border: Border.all(
                                     color: isSelected
                                         ? (t == 'hard'
                                             ? GitColors.error
-                                            : Theme.of(context).colorScheme.primary)
+                                            : Theme.of(context)
+                                                .colorScheme
+                                                .primary)
                                         : Colors.grey[300]!,
                                   ),
                                 ),
@@ -104,7 +114,9 @@ class _ResetModalState extends State<ResetModal> {
                                       color: isSelected
                                           ? (t == 'hard'
                                               ? GitColors.error
-                                              : Theme.of(context).colorScheme.primary)
+                                              : Theme.of(context)
+                                                  .colorScheme
+                                                  .primary)
                                           : Colors.grey[600],
                                     ),
                                   ),
@@ -115,98 +127,167 @@ class _ResetModalState extends State<ResetModal> {
                         );
                       }).toList(),
                     ),
-                    if (_resetType == 'hard') ...[
-                      const SizedBox(height: 12),
+                    const SizedBox(height: 12),
+                    Container(
+                      padding: const EdgeInsets.all(12),
+                      decoration: BoxDecoration(
+                        color: _resetType == 'hard'
+                            ? GitColors.error.withOpacity(0.08)
+                            : (isDark ? Colors.white10 : Colors.grey[100]),
+                        borderRadius: BorderRadius.circular(8),
+                        border: Border.all(
+                          color: _resetType == 'hard'
+                              ? GitColors.error.withOpacity(0.35)
+                              : Colors.grey[300]!,
+                        ),
+                      ),
+                      child: Text(
+                        _modeDescription(_resetType),
+                        style: TextStyle(
+                          fontSize: 13,
+                          height: 1.35,
+                          color: _resetType == 'hard'
+                              ? GitColors.error
+                              : (isDark ? Colors.white : Colors.black87),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+                    Expanded(
+                      child: widget.commits.isEmpty
+                          ? Center(
+                              child: Text('暂无可重置提交',
+                                  style: TextStyle(color: Colors.grey[600])),
+                            )
+                          : ListView(
+                              children: widget.commits.map((c) {
+                                final isSelected = _selected?.hash == c.hash;
+                                return InkWell(
+                                  onTap: () => setState(() => _selected = c),
+                                  child: Container(
+                                    padding: const EdgeInsets.all(12),
+                                    margin: const EdgeInsets.only(bottom: 4),
+                                    decoration: BoxDecoration(
+                                      color: isSelected
+                                          ? Theme.of(context)
+                                              .colorScheme
+                                              .primary
+                                              .withOpacity(0.1)
+                                          : null,
+                                      borderRadius: BorderRadius.circular(8),
+                                      border: Border.all(
+                                        color: isSelected
+                                            ? Theme.of(context)
+                                                .colorScheme
+                                                .primary
+                                            : Colors.transparent,
+                                      ),
+                                    ),
+                                    child: Row(
+                                      children: [
+                                        Expanded(
+                                          child: Column(
+                                            crossAxisAlignment:
+                                                CrossAxisAlignment.start,
+                                            children: [
+                                              Text(
+                                                c.shortHash,
+                                                style: TextStyle(
+                                                  fontSize: 12,
+                                                  fontFamily: 'monospace',
+                                                  color: Theme.of(context)
+                                                      .colorScheme
+                                                      .primary,
+                                                ),
+                                              ),
+                                              const SizedBox(height: 2),
+                                              Text(
+                                                c.message,
+                                                style: TextStyle(
+                                                  fontSize: 13,
+                                                  color: isDark
+                                                      ? Colors.white
+                                                      : Colors.black87,
+                                                ),
+                                              ),
+                                              const SizedBox(height: 2),
+                                              Text(
+                                                _formatDate(c.date),
+                                                style: TextStyle(
+                                                    fontSize: 11,
+                                                    color: Colors.grey[500]),
+                                              ),
+                                            ],
+                                          ),
+                                        ),
+                                        if (isSelected)
+                                          Icon(
+                                            Icons.check,
+                                            size: 18,
+                                            color: Theme.of(context)
+                                                .colorScheme
+                                                .primary,
+                                          ),
+                                      ],
+                                    ),
+                                  ),
+                                );
+                              }).toList(),
+                            ),
+                    ),
+                    const SizedBox(height: 12),
+                    if (selected != null)
                       Container(
                         padding: const EdgeInsets.all(12),
                         decoration: BoxDecoration(
-                          color: GitColors.error.withOpacity(0.1),
+                          color: isDark ? Colors.white10 : Colors.grey[100],
                           borderRadius: BorderRadius.circular(8),
-                          border: Border.all(color: GitColors.error.withOpacity(0.3)),
                         ),
-                        child: Row(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            const Icon(Icons.warning_rounded, size: 16, color: GitColors.error),
-                            const SizedBox(width: 8),
-                            Expanded(
-                              child: Text(
-                                '硬重置将丢弃所有未提交的更改！',
-                                style: const TextStyle(fontSize: 13, color: GitColors.error),
+                            Text(
+                              '目标提交',
+                              style: TextStyle(
+                                fontSize: 12,
+                                color: Colors.grey[600],
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                            const SizedBox(height: 4),
+                            Text(
+                              '${selected.shortHash} · ${selected.message}',
+                              style: TextStyle(
+                                fontSize: 13,
+                                color: isDark ? Colors.white : Colors.black87,
+                              ),
+                            ),
+                            const SizedBox(height: 2),
+                            Text(
+                              '命令预览: git reset --$_resetType ${selected.hash}',
+                              style: TextStyle(
+                                fontSize: 11,
+                                fontFamily: 'monospace',
+                                color: Colors.grey[600],
                               ),
                             ),
                           ],
                         ),
                       ),
-                    ],
                     const SizedBox(height: 12),
-                    if (widget.commits.isEmpty)
-                      Padding(
-                        padding: const EdgeInsets.symmetric(vertical: 12),
-                        child: Text('暂无可重置提交', style: TextStyle(color: Colors.grey[600])),
-                      ),
-                    ...widget.commits.map((c) {
-                      final isSelected = _selected?.hash == c.hash;
-                      return InkWell(
-                        onTap: () => setState(() => _selected = c),
-                        child: Container(
-                          padding: const EdgeInsets.all(12),
-                          margin: const EdgeInsets.only(bottom: 4),
-                          decoration: BoxDecoration(
-                            color: isSelected ? Theme.of(context).colorScheme.primary.withOpacity(0.1) : null,
-                            borderRadius: BorderRadius.circular(8),
-                            border: Border.all(
-                              color: isSelected
-                                  ? Theme.of(context).colorScheme.primary
-                                  : Colors.transparent,
-                            ),
-                          ),
-                          child: Row(
-                            children: [
-                              Expanded(
-                                child: Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                    Text(
-                                      c.shortHash,
-                                      style: TextStyle(
-                                        fontSize: 12,
-                                        fontFamily: 'monospace',
-                                        color: Theme.of(context).colorScheme.primary,
-                                      ),
-                                    ),
-                                    const SizedBox(height: 2),
-                                    Text(
-                                      c.message,
-                                      style: TextStyle(
-                                        fontSize: 13,
-                                        color: isDark ? Colors.white : Colors.black87,
-                                      ),
-                                    ),
-                                    const SizedBox(height: 2),
-                                    Text(
-                                      _formatDate(c.date),
-                                      style: TextStyle(fontSize: 11, color: Colors.grey[500]),
-                                    ),
-                                  ],
-                                ),
-                              ),
-                              if (isSelected)
-                                Icon(Icons.check, size: 18, color: Theme.of(context).colorScheme.primary),
-                            ],
-                          ),
-                        ),
-                      );
-                    }),
-                    const SizedBox(height: 16),
                     ElevatedButton(
                       style: ElevatedButton.styleFrom(
-                        backgroundColor:
-                            _resetType == 'hard' ? GitColors.error : Theme.of(context).colorScheme.primary,
+                        backgroundColor: _resetType == 'hard'
+                            ? GitColors.error
+                            : Theme.of(context).colorScheme.primary,
                         foregroundColor: Colors.white,
                         padding: const EdgeInsets.symmetric(vertical: 14),
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                        shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(12)),
                       ),
-                      onPressed: _selected != null ? () => widget.onConfirm(_selected!, _resetType) : null,
+                      onPressed: selected != null
+                          ? () => _confirmAndSubmit(context, selected)
+                          : null,
                       child: Row(
                         mainAxisAlignment: MainAxisAlignment.center,
                         children: [
@@ -226,6 +307,85 @@ class _ResetModalState extends State<ResetModal> {
         ),
       ),
     );
+  }
+
+  Future<void> _confirmAndSubmit(BuildContext context, GitCommit commit) async {
+    final isHard = _resetType == 'hard';
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) {
+        final isDark = Theme.of(dialogContext).brightness == Brightness.dark;
+        return AlertDialog(
+          title: Text(isHard ? '确认硬重置' : '确认重置'),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                '将执行 git reset --$_resetType ${commit.hash}',
+                style: TextStyle(
+                  fontSize: 12,
+                  fontFamily: 'monospace',
+                  color: isDark ? Colors.white : Colors.black87,
+                ),
+              ),
+              const SizedBox(height: 10),
+              Text(
+                isHard
+                    ? '这会移动 HEAD，并永久丢弃暂存区和工作区的改动。请再次确认。'
+                    : _modeRiskHint(_resetType),
+                style: TextStyle(
+                  fontSize: 13,
+                  color: isHard ? GitColors.error : Colors.grey[700],
+                ),
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(dialogContext, false),
+              child: const Text('取消'),
+            ),
+            FilledButton(
+              style: FilledButton.styleFrom(
+                backgroundColor: isHard
+                    ? GitColors.error
+                    : Theme.of(context).colorScheme.primary,
+              ),
+              onPressed: () => Navigator.pop(dialogContext, true),
+              child: Text(isHard ? '确认硬重置' : '确认执行'),
+            ),
+          ],
+        );
+      },
+    );
+
+    if (confirmed == true) {
+      widget.onConfirm(commit, _resetType);
+    }
+  }
+
+  String _modeDescription(String mode) {
+    switch (mode) {
+      case 'soft':
+        return 'soft: 仅移动 HEAD 到目标提交；暂存区和工作区保持不变，适合重新整理最近提交。';
+      case 'hard':
+        return 'hard: 移动 HEAD、重置暂存区并覆盖工作区。未提交改动会被丢弃。';
+      case 'mixed':
+      default:
+        return 'mixed: 移动 HEAD 并重置暂存区，工作区改动保留（默认 reset 行为）。';
+    }
+  }
+
+  String _modeRiskHint(String mode) {
+    switch (mode) {
+      case 'soft':
+        return '只会回退提交历史，不会改动文件内容。';
+      case 'mixed':
+        return '会取消暂存状态，文件改动仍保留在工作区。';
+      default:
+        return '请确认此操作符合预期。';
+    }
   }
 
   String _formatDate(DateTime date) {

@@ -7,7 +7,8 @@ import '../models/git_models.dart';
 import 'settings_service.dart';
 
 class GitService extends ChangeNotifier {
-  GitService({SettingsService? settings}) : _settings = settings ?? SettingsService();
+  GitService({SettingsService? settings})
+      : _settings = settings ?? SettingsService();
 
   static const String _defaultProjectName = 'vibe-code-mobile';
 
@@ -18,6 +19,17 @@ class GitService extends ChangeNotifier {
 
   void _log(String message) {
     debugPrint('[GitService] $message');
+  }
+
+  Future<String> _effectiveProjectName(String? projectName) async {
+    if (projectName != null && projectName.trim().isNotEmpty) {
+      return projectName.trim();
+    }
+    final selected = await _settings.getSelectedProjectName();
+    if (selected != null && selected.trim().isNotEmpty) {
+      return selected.trim();
+    }
+    return _defaultProjectName;
   }
 
   Future<GitSummary> getSummary() async {
@@ -60,7 +72,8 @@ class GitService extends ChangeNotifier {
       return GitRunStatus(
         runningTaskCount: 1,
         tasks: [
-          GitRunTask(taskName: 'npm start', command: 'npm start', status: 'running'),
+          GitRunTask(
+              taskName: 'npm start', command: 'npm start', status: 'running'),
         ],
       );
     }
@@ -74,7 +87,8 @@ class GitService extends ChangeNotifier {
           .whereType<Map<String, dynamic>>()
           .map(
             (item) => GitRunTask(
-              taskName: _readString(item, ['task_name', 'name'], fallback: 'task'),
+              taskName:
+                  _readString(item, ['task_name', 'name'], fallback: 'task'),
               command: _nullableString(item['command']),
               status: _nullableString(item['status']),
               pid: _nullableInt(item['pid']),
@@ -97,12 +111,13 @@ class GitService extends ChangeNotifier {
   Future<GitOperationResult> startRun({
     required String command,
     required String taskName,
-    String projectName = _defaultProjectName,
-  }) {
+    String? projectName,
+  }) async {
+    final effectiveProjectName = await _effectiveProjectName(projectName);
     return _post(
       '/vibe/git/project/run/start',
       body: {
-        'project_name': projectName,
+        'project_name': effectiveProjectName,
         'command': command,
         'task_name': taskName,
       },
@@ -110,20 +125,22 @@ class GitService extends ChangeNotifier {
   }
 
   Future<GitOperationResult> installDependencies({
-    String projectName = _defaultProjectName,
-  }) {
+    String? projectName,
+  }) async {
+    final effectiveProjectName = await _effectiveProjectName(projectName);
     return _post(
       '/vibe/git/project/run/install',
-      body: {'project_name': projectName},
+      body: {'project_name': effectiveProjectName},
     );
   }
 
   Future<GitOperationResult> stopAllRuns({
-    String projectName = _defaultProjectName,
-  }) {
+    String? projectName,
+  }) async {
+    final effectiveProjectName = await _effectiveProjectName(projectName);
     return _post(
       '/vibe/git/project/run/stop',
-      body: {'project_name': projectName},
+      body: {'project_name': effectiveProjectName},
     );
   }
 
@@ -131,12 +148,13 @@ class GitService extends ChangeNotifier {
     String remote = 'origin',
     String branch = 'main',
     bool rebase = false,
-    String projectName = _defaultProjectName,
-  }) {
+    String? projectName,
+  }) async {
+    final effectiveProjectName = await _effectiveProjectName(projectName);
     return _post(
       '/vibe/git/sync/pull',
       body: {
-        'project_name': projectName,
+        'project_name': effectiveProjectName,
         'remote': remote,
         'branch': branch,
         'rebase': rebase,
@@ -146,8 +164,9 @@ class GitService extends ChangeNotifier {
 
   Future<GitPushSummary> getPushSummary({
     String remote = 'origin',
-    String projectName = _defaultProjectName,
+    String? projectName,
   }) async {
+    final effectiveProjectName = await _effectiveProjectName(projectName);
     final mock = await _settings.getGitMockMode();
     if (mock) {
       _log('GET /vibe/git/sync/push/preview -> mock mode enabled');
@@ -157,7 +176,7 @@ class GitService extends ChangeNotifier {
     final response = await _get(
       '/vibe/git/sync/push/preview',
       query: {
-        'project_name': projectName,
+        'project_name': effectiveProjectName,
         'remote': remote,
       },
     );
@@ -174,12 +193,13 @@ class GitService extends ChangeNotifier {
   Future<GitOperationResult> push({
     required String branch,
     String remote = 'origin',
-    String projectName = _defaultProjectName,
-  }) {
+    String? projectName,
+  }) async {
+    final effectiveProjectName = await _effectiveProjectName(projectName);
     return _post(
       '/vibe/git/sync/push',
       body: {
-        'project_name': projectName,
+        'project_name': effectiveProjectName,
         'remote': remote,
         'branch': branch,
       },
@@ -190,12 +210,13 @@ class GitService extends ChangeNotifier {
     required String message,
     required List<String> filePaths,
     bool addAll = false,
-    String projectName = _defaultProjectName,
-  }) {
+    String? projectName,
+  }) async {
+    final effectiveProjectName = await _effectiveProjectName(projectName);
     return _post(
       '/vibe/git/change/commit',
       body: {
-        'project_name': projectName,
+        'project_name': effectiveProjectName,
         'message': message,
         'file_paths': filePaths,
         'add_all': addAll,
@@ -205,8 +226,9 @@ class GitService extends ChangeNotifier {
 
   Future<List<GitCommit>> getResetCandidates({
     int limit = 20,
-    String projectName = _defaultProjectName,
+    String? projectName,
   }) async {
+    final effectiveProjectName = await _effectiveProjectName(projectName);
     final mock = await _settings.getGitMockMode();
     if (mock) {
       _log('GET /vibe/git/change/reset/candidates -> mock mode enabled');
@@ -229,7 +251,7 @@ class GitService extends ChangeNotifier {
     final response = await _get(
       '/vibe/git/change/reset/candidates',
       query: {
-        'project_name': projectName,
+        'project_name': effectiveProjectName,
         'limit': '$limit',
       },
     );
@@ -240,12 +262,13 @@ class GitService extends ChangeNotifier {
   Future<GitOperationResult> reset({
     required String hash,
     required String mode,
-    String projectName = _defaultProjectName,
-  }) {
+    String? projectName,
+  }) async {
+    final effectiveProjectName = await _effectiveProjectName(projectName);
     return _post(
       '/vibe/git/change/reset',
       body: {
-        'project_name': projectName,
+        'project_name': effectiveProjectName,
         'commit_hash': hash,
         'mode': mode,
       },
@@ -255,12 +278,13 @@ class GitService extends ChangeNotifier {
   Future<GitOperationResult> stash({
     String message = 'wip',
     bool includeUntracked = true,
-    String projectName = _defaultProjectName,
-  }) {
+    String? projectName,
+  }) async {
+    final effectiveProjectName = await _effectiveProjectName(projectName);
     return _post(
       '/vibe/git/advanced/stash',
       body: {
-        'project_name': projectName,
+        'project_name': effectiveProjectName,
         'message': message,
         'include_untracked': includeUntracked,
       },
@@ -269,20 +293,22 @@ class GitService extends ChangeNotifier {
 
   Future<GitOperationResult> stashPop({
     String? stashRef,
-    String projectName = _defaultProjectName,
-  }) {
+    String? projectName,
+  }) async {
+    final effectiveProjectName = await _effectiveProjectName(projectName);
     return _post(
       '/vibe/git/advanced/stash/pop',
       body: {
-        'project_name': projectName,
+        'project_name': effectiveProjectName,
         if (stashRef != null && stashRef.isNotEmpty) 'stash_ref': stashRef,
       },
     );
   }
 
   Future<List<String>> getBranches({
-    String projectName = _defaultProjectName,
+    String? projectName,
   }) async {
+    final effectiveProjectName = await _effectiveProjectName(projectName);
     final mock = await _settings.getGitMockMode();
     if (mock) {
       _log('GET /vibe/git/advanced/branches -> mock mode enabled');
@@ -291,7 +317,7 @@ class GitService extends ChangeNotifier {
 
     final response = await _get(
       '/vibe/git/advanced/branches',
-      query: {'project_name': projectName},
+      query: {'project_name': effectiveProjectName},
     );
     if (!response.success) throw Exception(response.message);
     final payload = _payload(response.details);
@@ -307,12 +333,13 @@ class GitService extends ChangeNotifier {
 
   Future<GitOperationResult> checkout({
     required String branch,
-    String projectName = _defaultProjectName,
-  }) {
+    String? projectName,
+  }) async {
+    final effectiveProjectName = await _effectiveProjectName(projectName);
     return _post(
       '/vibe/git/advanced/checkout',
       body: {
-        'project_name': projectName,
+        'project_name': effectiveProjectName,
         'branch': branch,
       },
     );
@@ -320,8 +347,9 @@ class GitService extends ChangeNotifier {
 
   Future<List<GitCommit>> log({
     int limit = 20,
-    String projectName = _defaultProjectName,
+    String? projectName,
   }) async {
+    final effectiveProjectName = await _effectiveProjectName(projectName);
     final mock = await _settings.getGitMockMode();
     if (mock) {
       _log('GET /vibe/git/advanced/log -> mock mode enabled');
@@ -350,7 +378,7 @@ class GitService extends ChangeNotifier {
     final response = await _get(
       '/vibe/git/advanced/log',
       query: {
-        'project_name': projectName,
+        'project_name': effectiveProjectName,
         'limit': '$limit',
       },
     );
@@ -359,14 +387,16 @@ class GitService extends ChangeNotifier {
   }
 
   Future<GitWorktreeStatus> status({
-    String projectName = _defaultProjectName,
+    String? projectName,
   }) async {
+    final effectiveProjectName = await _effectiveProjectName(projectName);
     final mock = await _settings.getGitMockMode();
     if (mock) {
       _log('GET /vibe/git/worktree/status -> mock mode enabled');
       return GitWorktreeStatus(
         files: [
-          GitWorktreeFile(path: 'lib/screens/chat_screen.dart', statusCode: 'M'),
+          GitWorktreeFile(
+              path: 'lib/screens/chat_screen.dart', statusCode: 'M'),
           GitWorktreeFile(path: 'lib/widgets/input_bar.dart', statusCode: 'M'),
           GitWorktreeFile(path: 'lib/models/message.dart', statusCode: 'A'),
           GitWorktreeFile(path: 'assets/logo.png', statusCode: 'D'),
@@ -377,7 +407,7 @@ class GitService extends ChangeNotifier {
 
     final response = await _get(
       '/vibe/git/worktree/status',
-      query: {'project_name': projectName},
+      query: {'project_name': effectiveProjectName},
     );
     if (!response.success) throw Exception(response.message);
 
@@ -402,6 +432,80 @@ class GitService extends ChangeNotifier {
     return GitWorktreeStatus(files: const []);
   }
 
+  Future<GitOperationResult> discardAllChanges({
+    String? projectName,
+  }) async {
+    final effectiveProjectName = await _effectiveProjectName(projectName);
+    return _post(
+      '/vibe/git/worktree/discard',
+      body: {
+        'project_name': effectiveProjectName,
+        'discard_all': true,
+      },
+    );
+  }
+
+  Future<GitOperationResult> discardFileChanges({
+    required String filePath,
+    String? projectName,
+  }) async {
+    final effectiveProjectName = await _effectiveProjectName(projectName);
+    return _post(
+      '/vibe/git/worktree/discard',
+      body: {
+        'project_name': effectiveProjectName,
+        'file_path': filePath,
+      },
+    );
+  }
+
+  Future<GitFileDiff> getFileDiff({
+    required String filePath,
+    String? projectName,
+  }) async {
+    final effectiveProjectName = await _effectiveProjectName(projectName);
+    final mock = await _settings.getGitMockMode();
+    if (mock) {
+      _log('GET /vibe/git/worktree/diff -> mock mode enabled');
+      return GitFileDiff(
+        path: filePath,
+        beforeContent: '''
+class Example {
+  void run() {
+    print('old');
+  }
+}
+''',
+        afterContent: '''
+class Example {
+  void run() {
+    print('new');
+  }
+}
+''',
+        patch: '''
+@@ -2,5 +2,5 @@
+ class Example {
+   void run() {
+-    print('old');
++    print('new');
+   }
+ }
+''',
+      );
+    }
+
+    final response = await _get(
+      '/vibe/git/worktree/diff',
+      query: {
+        'project_name': effectiveProjectName,
+        'file_path': filePath,
+      },
+    );
+    if (!response.success) throw Exception(response.message);
+    return _parseFileDiff(response.details, filePath: filePath);
+  }
+
   Future<GitOperationResult> _get(
     String path, {
     Map<String, String>? query,
@@ -418,7 +522,8 @@ class GitService extends ChangeNotifier {
       await Future<void>.delayed(const Duration(milliseconds: 300));
       final opName = path.split('/').where((e) => e.isNotEmpty).last;
       _log('POST $path -> mock mode enabled, body=${jsonEncode(body)}');
-      return GitOperationResult(success: true, message: 'Mock $opName complete.');
+      return GitOperationResult(
+          success: true, message: 'Mock $opName complete.');
     }
     return _request(method: 'POST', path: path, body: body);
   }
@@ -471,7 +576,8 @@ class GitService extends ChangeNotifier {
         response = await http.get(
           uri,
           headers: {
-            if (token != null && token.isNotEmpty) 'Authorization': 'Bearer $token',
+            if (token != null && token.isNotEmpty)
+              'Authorization': 'Bearer $token',
           },
         );
       } else {
@@ -479,34 +585,38 @@ class GitService extends ChangeNotifier {
           uri,
           headers: {
             'Content-Type': 'application/json',
-            if (token != null && token.isNotEmpty) 'Authorization': 'Bearer $token',
+            if (token != null && token.isNotEmpty)
+              'Authorization': 'Bearer $token',
           },
           body: jsonEncode(requestBody),
         );
       }
 
       final payload = _safeDecode(response.body);
+      final httpSuccess =
+          response.statusCode >= 200 && response.statusCode < 300;
+      final businessSuccess = _isBusinessSuccess(payload);
+      final success = httpSuccess && businessSuccess;
       final message = _extractMessage(payload) ??
-          (response.statusCode >= 200 && response.statusCode < 300
-              ? 'Operation succeeded'
-              : 'Git operation failed.');
+          (success ? 'Operation succeeded' : 'Git operation failed.');
 
       final elapsedMs = DateTime.now().difference(startedAt).inMilliseconds;
       _log(
         '$method $path done status=${response.statusCode} '
-        'success=${response.statusCode >= 200 && response.statusCode < 300} '
+        'success=$success '
         'elapsed=${elapsedMs}ms body=${_truncate(response.body)}',
       );
 
       return GitOperationResult(
-        success: response.statusCode >= 200 && response.statusCode < 300,
+        success: success,
         message: message,
         details: response.body,
       );
     } catch (error) {
       final elapsedMs = DateTime.now().difference(startedAt).inMilliseconds;
       _log('$method $path exception after ${elapsedMs}ms: $error');
-      return GitOperationResult(success: false, message: 'Network error.', details: error.toString());
+      return GitOperationResult(
+          success: false, message: 'Network error.', details: error.toString());
     } finally {
       _busy = false;
       notifyListeners();
@@ -524,7 +634,8 @@ class GitService extends ChangeNotifier {
   }
 
   GitCommit _parseCommit(Map<String, dynamic> item) {
-    final hash = _readString(item, ['hash', 'commit_hash', 'id'], fallback: 'unknown');
+    final hash =
+        _readString(item, ['hash', 'commit_hash', 'id'], fallback: 'unknown');
     final message = _readString(item, ['message', 'subject'], fallback: '');
     final dateStr = _nullableString(item['date']) ??
         _nullableString(item['timestamp']) ??
@@ -533,16 +644,61 @@ class GitService extends ChangeNotifier {
       hash: hash,
       message: message,
       date: _parseDate(dateStr),
-      author: _nullableString(item['author']) ?? _nullableString(item['author_name']),
+      author: _nullableString(item['author']) ??
+          _nullableString(item['author_name']),
     );
   }
 
   List<GitWorktreeFile> _parseWorktreeFiles(List<dynamic> raw) {
-    return raw.whereType<Map<String, dynamic>>().map((item) {
-      final path = _readString(item, ['path', 'file_path'], fallback: '');
-      final statusCode = _readString(item, ['status', 'status_code'], fallback: 'M');
-      return GitWorktreeFile(path: path, statusCode: statusCode);
-    }).where((item) => item.path.isNotEmpty).toList();
+    return raw
+        .whereType<Map<String, dynamic>>()
+        .map((item) {
+          final path = _readString(item, ['path', 'file_path'], fallback: '');
+          final statusCode =
+              _readString(item, ['status', 'status_code'], fallback: 'M');
+          return GitWorktreeFile(path: path, statusCode: statusCode);
+        })
+        .where((item) => item.path.isNotEmpty)
+        .toList();
+  }
+
+  GitFileDiff _parseFileDiff(String? raw, {required String filePath}) {
+    final payload = _payload(raw);
+    if (payload is String) {
+      return GitFileDiff(path: filePath, patch: payload);
+    }
+    if (payload is Map<String, dynamic>) {
+      final content = payload['content'];
+      final contentMap =
+          content is Map<String, dynamic> ? content : const <String, dynamic>{};
+      final merged = <String, dynamic>{...payload, ...contentMap};
+      return GitFileDiff(
+        path: _readString(merged, ['path', 'file_path'], fallback: filePath),
+        beforeContent: _readOptionalString(
+          merged,
+          const [
+            'before_content',
+            'before',
+            'old_content',
+            'original',
+            'content_before'
+          ],
+        ),
+        afterContent: _readOptionalString(
+          merged,
+          const [
+            'after_content',
+            'after',
+            'new_content',
+            'modified',
+            'content_after'
+          ],
+        ),
+        patch: _readOptionalString(
+            merged, const ['patch', 'diff', 'unified_diff']),
+      );
+    }
+    return GitFileDiff(path: filePath);
   }
 
   dynamic _payload(String? raw) {
@@ -573,7 +729,7 @@ class GitService extends ChangeNotifier {
 
   String? _extractMessage(dynamic payload) {
     if (payload is Map<String, dynamic>) {
-      for (final key in const ['message', 'msg', 'detail']) {
+      for (final key in const ['message', 'msg', 'detail', 'error']) {
         final value = payload[key];
         if (value is String && value.isNotEmpty) return value;
       }
@@ -589,7 +745,8 @@ class GitService extends ChangeNotifier {
     return const [];
   }
 
-  String _readString(Map<String, dynamic> map, List<String> keys, {required String fallback}) {
+  String _readString(Map<String, dynamic> map, List<String> keys,
+      {required String fallback}) {
     for (final key in keys) {
       final value = _nullableString(map[key]);
       if (value != null && value.isNotEmpty) return value;
@@ -597,7 +754,16 @@ class GitService extends ChangeNotifier {
     return fallback;
   }
 
-  int _readInt(Map<String, dynamic> map, List<String> keys, {required int fallback}) {
+  String? _readOptionalString(Map<String, dynamic> map, List<String> keys) {
+    for (final key in keys) {
+      final value = _nullableString(map[key]);
+      if (value != null && value.isNotEmpty) return value;
+    }
+    return null;
+  }
+
+  int _readInt(Map<String, dynamic> map, List<String> keys,
+      {required int fallback}) {
     for (final key in keys) {
       final value = _nullableInt(map[key]);
       if (value != null) return value;
@@ -621,6 +787,13 @@ class GitService extends ChangeNotifier {
   DateTime _parseDate(String? value) {
     if (value == null || value.isEmpty) return DateTime.now();
     return DateTime.tryParse(value)?.toLocal() ?? DateTime.now();
+  }
+
+  bool _isBusinessSuccess(dynamic payload) {
+    if (payload is! Map<String, dynamic>) return true;
+    final code = _nullableInt(payload['code']);
+    if (code == null) return true;
+    return code == 200 || code == 0;
   }
 
   String _truncate(String value, {int max = 500}) {

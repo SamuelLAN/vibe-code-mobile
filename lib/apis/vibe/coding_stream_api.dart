@@ -45,6 +45,9 @@ class CodingStreamApiClient {
     required String msg,
     required String mode,
     String? flowId,
+    String? chatId,
+    String? memoryId,
+    String? projectName,
     String? funcFeedback,
     required CodingStreamListener onEvent,
   }) async {
@@ -55,6 +58,15 @@ class CodingStreamApiClient {
     };
     if (flowId != null && flowId.isNotEmpty) {
       body['flow_id'] = flowId;
+    }
+    if (chatId != null && chatId.isNotEmpty) {
+      body['chat_id'] = chatId;
+    }
+    if (memoryId != null && memoryId.isNotEmpty) {
+      body['memory_id'] = memoryId;
+    }
+    if (projectName != null && projectName.isNotEmpty) {
+      body['project_name'] = projectName;
     }
     if (funcFeedback != null && funcFeedback.isNotEmpty) {
       body['func_feedback'] = funcFeedback;

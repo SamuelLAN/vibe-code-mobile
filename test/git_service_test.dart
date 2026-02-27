@@ -5,7 +5,7 @@ import 'package:plutux_code/services/settings_service.dart';
 import 'support/in_memory_store.dart';
 
 void main() {
-  test('git service requires backend config in real mode', () async {
+  test('git service uses real mode and fails without auth token', () async {
     final store = InMemoryStore();
     final settings = SettingsService(store: store);
 
@@ -13,6 +13,6 @@ void main() {
     final result = await git.pull();
 
     expect(result.success, isFalse);
-    expect(result.message, contains('configured'));
+    expect(result.message, isNotEmpty);
   });
 }

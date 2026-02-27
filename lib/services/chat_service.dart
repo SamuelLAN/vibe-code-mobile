@@ -416,7 +416,8 @@ class ChatService extends ChangeNotifier {
     _streamProcessors[assistantMessage.id] = StreamBufferProcessor();
 
     _isGenerating = true;
-    _currentFlowId = _uuid.v4();
+    // Let backend allocate a fresh flow_id per message when chat_id is provided.
+    _currentFlowId = null;
     final generationId = _uuid.v4();
     _activeGenerationId = generationId;
     notifyListeners();
@@ -435,7 +436,9 @@ class ChatService extends ChangeNotifier {
       accessToken: accessToken,
       msg: prompt,
       mode: 'flash',
-      flowId: _currentFlowId,
+      chatId: _activeChat!.id,
+      memoryId: _activeChat!.id,
+      projectName: 'vibe-code-mobile',
       onEvent: (event) {
         if (_activeGenerationId != generationId) {
           return;

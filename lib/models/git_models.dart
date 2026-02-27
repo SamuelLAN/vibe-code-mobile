@@ -119,3 +119,17 @@ class GitWorktreeStatus {
   final List<GitWorktreeFile> files;
   final Map<String, int> counts;
 }
+
+class GitFileDiff {
+  GitFileDiff({
+    required this.path,
+    this.beforeContent,
+    this.afterContent,
+    this.patch,
+  });
+
+  final String path;
+  final String? beforeContent;
+  final String? afterContent;
+  final String? patch;
+}

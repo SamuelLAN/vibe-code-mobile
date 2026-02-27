@@ -286,6 +286,8 @@ class _FunctionTimelineBlock extends StatefulWidget {
 }
 
 class _FunctionTimelineBlockState extends State<_FunctionTimelineBlock> {
+  static const double _collapsedCodeViewportHeight = 140;
+  static const double _expandedCodeViewportHeight = 320;
   bool _expanded = false;
 
   @override
@@ -314,6 +316,13 @@ class _FunctionTimelineBlockState extends State<_FunctionTimelineBlock> {
         functionName == 'search_files' && widget.item.functionResult == null;
     final canExpand = !isSearchFilesLoading;
     final showExpanded = canExpand && _expanded;
+    final showCollapsedCodeView = !showExpanded &&
+        canExpand &&
+        _shouldShowCollapsedCodeView(functionName);
+    final showBody = showExpanded || showCollapsedCodeView;
+    final codeViewportHeight = showExpanded
+        ? _expandedCodeViewportHeight
+        : _collapsedCodeViewportHeight;
 
     return Container(
       width: double.infinity,
@@ -374,7 +383,7 @@ class _FunctionTimelineBlockState extends State<_FunctionTimelineBlock> {
               ),
             ),
           ),
-          if (showExpanded) ...[
+          if (showBody) ...[
             if (summary.subtitle != null && summary.subtitle!.isNotEmpty)
               Padding(
                 padding: const EdgeInsets.fromLTRB(22, 0, 8, 6),
@@ -390,7 +399,12 @@ class _FunctionTimelineBlockState extends State<_FunctionTimelineBlock> {
               ),
             Padding(
               padding: const EdgeInsets.fromLTRB(20, 0, 0, 8),
-              child: _buildExpandedContent(widget.item, widget.isDark),
+              child: _buildExpandedContent(
+                widget.item,
+                widget.isDark,
+                compactCodeView: showCollapsedCodeView,
+                codeViewportHeight: codeViewportHeight,
+              ),
             ),
           ],
         ],
@@ -411,6 +425,10 @@ class _FunctionTimelineBlockState extends State<_FunctionTimelineBlock> {
       return true;
     }
     return false;
+  }
+
+  bool _shouldShowCollapsedCodeView(String functionName) {
+    return functionName == 'apply_diff' || functionName == 'write_file';
   }
 
   _FunctionSummary _buildSummary(_StreamRenderItem item) {
@@ -533,15 +551,10 @@ class _FunctionTimelineBlockState extends State<_FunctionTimelineBlock> {
       final args = (callParsed?['args'] ?? callParsed?['arguments']);
       final paths = _extractLinterRequestPaths(args);
       final results = _extractLinterResults(resultParsed?['response']);
-      final firstName = paths.isNotEmpty ? p.basename(paths.first) : null;
       return _FunctionSummary(
         icon: Icons.rule,
-        title: (paths.length <= 1 && firstName != null)
-            ? 'Lint $firstName'
-            : (paths.isNotEmpty
-                ? 'Lint ${paths.length} files'
-                : 'Check linter'),
-        subtitle: results.isEmpty ? null : _formatLinterSummary(results),
+        title: _formatCheckLinterCollapsedTitle(paths, results),
+        subtitle: null,
       );
     }
 
@@ -587,7 +600,12 @@ class _FunctionTimelineBlockState extends State<_FunctionTimelineBlock> {
     );
   }
 
-  Widget _buildExpandedContent(_StreamRenderItem item, bool isDark) {
+  Widget _buildExpandedContent(
+    _StreamRenderItem item,
+    bool isDark, {
+    bool compactCodeView = false,
+    double codeViewportHeight = 320,
+  }) {
     final functionName = (item.functionResult?.metadata?['functionName'] ??
             item.functionCall?.metadata?['functionName'])
         ?.toString();
@@ -627,8 +645,13 @@ class _FunctionTimelineBlockState extends State<_FunctionTimelineBlock> {
       if (body != null) return body;
     }
     if (functionName == 'apply_diff') {
-      final body =
-          _buildApplyDiffExpandedBody(callParsed, resultParsed, isDark);
+      final body = _buildApplyDiffExpandedBody(
+        callParsed,
+        resultParsed,
+        isDark,
+        compactCodeView: compactCodeView,
+        codeViewportHeight: codeViewportHeight,
+      );
       if (body != null) return body;
     }
     if (functionName == 'check_linter') {
@@ -637,8 +660,13 @@ class _FunctionTimelineBlockState extends State<_FunctionTimelineBlock> {
       if (body != null) return body;
     }
     if (functionName == 'write_file') {
-      final body =
-          _buildWriteFileExpandedBody(callParsed, resultParsed, isDark);
+      final body = _buildWriteFileExpandedBody(
+        callParsed,
+        resultParsed,
+        isDark,
+        compactCodeView: compactCodeView,
+        codeViewportHeight: codeViewportHeight,
+      );
       if (body != null) return body;
     }
     if (functionName == 'list_dir') {
@@ -932,8 +960,13 @@ class _FunctionTimelineBlockState extends State<_FunctionTimelineBlock> {
     );
   }
 
-  Widget? _buildApplyDiffExpandedBody(Map<String, dynamic>? callParsed,
-      Map<String, dynamic>? resultParsed, bool isDark) {
+  Widget? _buildApplyDiffExpandedBody(
+    Map<String, dynamic>? callParsed,
+    Map<String, dynamic>? resultParsed,
+    bool isDark, {
+    bool compactCodeView = false,
+    double codeViewportHeight = 320,
+  }) {
     final args = callParsed?['args'] ?? callParsed?['arguments'];
     if (args is! Map) return null;
     final response = resultParsed?['response'];
@@ -1031,6 +1064,8 @@ class _FunctionTimelineBlockState extends State<_FunctionTimelineBlock> {
             _ApplyDiffPreviewCard(
               preview: preview,
               isDark: isDark,
+              compact: compactCodeView,
+              viewportHeight: codeViewportHeight,
             ),
           ],
         ],
@@ -1094,8 +1129,13 @@ class _FunctionTimelineBlockState extends State<_FunctionTimelineBlock> {
     );
   }
 
-  Widget? _buildWriteFileExpandedBody(Map<String, dynamic>? callParsed,
-      Map<String, dynamic>? resultParsed, bool isDark) {
+  Widget? _buildWriteFileExpandedBody(
+    Map<String, dynamic>? callParsed,
+    Map<String, dynamic>? resultParsed,
+    bool isDark, {
+    bool compactCodeView = false,
+    double codeViewportHeight = 320,
+  }) {
     final args = callParsed?['args'] ?? callParsed?['arguments'];
     if (args is! Map) return null;
     final response = resultParsed?['response'];
@@ -1181,7 +1221,12 @@ class _FunctionTimelineBlockState extends State<_FunctionTimelineBlock> {
           ],
           if (content.isNotEmpty) ...[
             const SizedBox(height: 8),
-            _WriteFileContentPreview(content: content, isDark: isDark),
+            _WriteFileContentPreview(
+              content: content,
+              isDark: isDark,
+              compact: compactCodeView,
+              viewportHeight: codeViewportHeight,
+            ),
           ],
         ],
       ),
@@ -1442,11 +1487,42 @@ class _FunctionTimelineBlockState extends State<_FunctionTimelineBlock> {
     return items;
   }
 
-  String _formatLinterSummary(List<_LinterFileResult> results) {
-    final successCount = results.where((e) => e.success == true).length;
-    final cleanCount = results.where((e) => e.clean == true).length;
-    final fixedCount = results.where((e) => e.fixed == true).length;
-    return '$successCount/${results.length} success · $cleanCount clean · $fixedCount fixed';
+  String _formatCheckLinterCollapsedTitle(
+      List<String> requestedPaths, List<_LinterFileResult> results) {
+    if (results.isNotEmpty) {
+      final first = results.first;
+      final basename = p.basename(first.path);
+      if (first.success == true) {
+        return '☑️ 语法检测通过：$basename';
+      }
+      if (first.success == false) {
+        final reason = _extractLinterFailureExcerpt(first.output);
+        return reason == null || reason.isEmpty
+            ? '❌ $basename'
+            : '❌ $basename: $reason';
+      }
+      return 'Lint $basename';
+    }
+
+    if (requestedPaths.length == 1) {
+      return 'Lint ${p.basename(requestedPaths.first)}';
+    }
+    if (requestedPaths.isNotEmpty) {
+      return 'Lint ${requestedPaths.length} files';
+    }
+    return 'Check linter';
+  }
+
+  String? _extractLinterFailureExcerpt(String? output) {
+    if (output == null || output.trim().isEmpty) return null;
+    final line = output
+        .split('\n')
+        .map((e) => e.trim())
+        .firstWhere((e) => e.isNotEmpty, orElse: () => '');
+    if (line.isEmpty) return null;
+    final compact = line.replaceAll(RegExp(r'\s+'), ' ').trim();
+    if (compact.length <= 120) return compact;
+    return '${compact.substring(0, 120)}...';
   }
 
   String _formatBytes(int bytes) {
@@ -1866,14 +1942,21 @@ class _CodingMindMapTreeCard extends StatelessWidget {
     return Container(
       decoration: BoxDecoration(
         color: isDark
-            ? Colors.white.withValues(alpha: 0.03)
-            : Colors.blueGrey.withValues(alpha: 0.02),
-        borderRadius: BorderRadius.circular(12),
+            ? Colors.white.withValues(alpha: 0.035)
+            : Colors.blueGrey.withValues(alpha: 0.05),
+        borderRadius: BorderRadius.circular(14),
         border: Border.all(
-          color: Colors.white.withValues(alpha: isDark ? 0.12 : 0.12),
+          color: Colors.white.withValues(alpha: isDark ? 0.14 : 0.2),
         ),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: isDark ? 0.22 : 0.06),
+            blurRadius: 10,
+            offset: const Offset(0, 2),
+          ),
+        ],
       ),
-      padding: const EdgeInsets.all(10),
+      padding: const EdgeInsets.fromLTRB(12, 10, 12, 10),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -1887,8 +1970,8 @@ class _CodingMindMapTreeCard extends StatelessWidget {
             ),
             if (i != roots.length - 1)
               Divider(
-                height: 10,
-                color: Colors.white.withValues(alpha: isDark ? 0.06 : 0.08),
+                height: 8,
+                color: Colors.white.withValues(alpha: isDark ? 0.05 : 0.1),
               ),
           ],
         ],
@@ -1920,22 +2003,29 @@ class _CodingMindMapNodeTileState extends State<_CodingMindMapNodeTile> {
   late bool _open = widget.defaultOpen;
 
   static const _accents = <Color>[
-    Color(0xFFF87171),
-    Color(0xFFF59E0B),
     Color(0xFF818CF8),
-    Color(0xFF34D399),
-    Color(0xFF38BDF8),
-    Color(0xFFF472B6),
+    Color(0xFF6366F1),
+    Color(0xFF7C83FF),
+    Color(0xFF60A5FA),
+    Color(0xFF8B5CF6),
+    Color(0xFF3B82F6),
   ];
+
+  static const double _lineW = 1.4;
+  static const double _connectorW = 22;
 
   @override
   Widget build(BuildContext context) {
     final hasChildren = widget.node.children.isNotEmpty;
-    final accent = _accents[widget.accentIndex % _accents.length];
+    final accent = widget.depth == 0
+        ? const Color(0xFFF87171)
+        : _accents[widget.accentIndex % _accents.length];
     final titleColor = widget.isDark ? Colors.grey[200] : Colors.blueGrey[800];
     final subColor = widget.isDark ? Colors.grey[400] : Colors.blueGrey[600];
     final titleSize = widget.depth == 0 ? 13.0 : 12.0;
-    final titleWeight = widget.depth == 0 ? FontWeight.w700 : FontWeight.w600;
+    final titleWeight = widget.depth == 0 ? FontWeight.w800 : FontWeight.w700;
+    final connectorColor =
+        Colors.white.withValues(alpha: widget.isDark ? 0.28 : 0.24);
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -1945,61 +2035,45 @@ class _CodingMindMapNodeTileState extends State<_CodingMindMapNodeTile> {
           borderRadius: BorderRadius.circular(8),
           child: Padding(
             padding: EdgeInsets.only(
-              left: widget.depth * 10.0,
-              top: 3,
-              bottom: 3,
+              left: widget.depth == 0 ? 0 : 2,
+              top: widget.depth == 0 ? 6 : 4,
+              bottom: widget.depth == 0 ? 6 : 4,
               right: 2,
             ),
             child: Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
+              crossAxisAlignment: CrossAxisAlignment.center,
               children: [
                 Container(
-                  width: widget.depth == 0 ? 2.8 : 2.2,
-                  height: widget.depth == 0 ? 22 : 18,
-                  margin: const EdgeInsets.only(top: 2, right: 8),
+                  width: widget.depth == 0 ? 2.8 : 2.4,
+                  height: widget.depth == 0 ? 30 : 24,
+                  margin: const EdgeInsets.only(right: 10),
                   decoration: BoxDecoration(
                     color: accent.withValues(
-                        alpha: widget.depth == 0 ? 0.95 : 0.8),
+                        alpha: widget.depth == 0 ? 0.95 : 0.86),
                     borderRadius: BorderRadius.circular(99),
                   ),
                 ),
                 Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        widget.node.title,
-                        maxLines: 2,
-                        overflow: TextOverflow.ellipsis,
-                        style: TextStyle(
-                          fontSize: titleSize,
-                          fontWeight: titleWeight,
-                          color: titleColor,
-                        ),
-                      ),
-                      if ((widget.node.subtitle?.isNotEmpty ?? false) ||
-                          (widget.node.path?.isNotEmpty ?? false) ||
-                          (widget.node.action?.isNotEmpty ?? false))
-                        Text(
-                          _buildMetaText(widget.node),
-                          maxLines: 2,
-                          overflow: TextOverflow.ellipsis,
-                          style: TextStyle(
-                            fontSize: 10.5,
-                            color: subColor,
-                          ),
-                        ),
-                    ],
+                  child: Text(
+                    widget.node.title,
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                      fontSize: titleSize,
+                      fontWeight: titleWeight,
+                      color: titleColor,
+                      height: 1.25,
+                    ),
                   ),
                 ),
                 if (hasChildren) ...[
                   const SizedBox(width: 8),
                   Container(
-                    width: 20,
-                    height: 20,
+                    width: 22,
+                    height: 22,
                     decoration: BoxDecoration(
                       color: Colors.white
-                          .withValues(alpha: widget.isDark ? 0.08 : 0.18),
+                          .withValues(alpha: widget.isDark ? 0.1 : 0.2),
                       shape: BoxShape.circle,
                     ),
                     child: Icon(
@@ -2015,33 +2089,86 @@ class _CodingMindMapNodeTileState extends State<_CodingMindMapNodeTile> {
         ),
         if (_open && hasChildren) ...[
           const SizedBox(height: 2),
-          for (var i = 0; i < widget.node.children.length; i++) ...[
-            _CodingMindMapNodeTile(
-              node: widget.node.children[i],
-              isDark: widget.isDark,
-              depth: widget.depth + 1,
-              accentIndex: i + widget.accentIndex + 1,
+          Padding(
+            padding: const EdgeInsets.only(left: 14),
+            child: Stack(
+              children: [
+                Positioned(
+                  left: 0,
+                  top: 0,
+                  bottom: 0,
+                  child: Container(
+                    width: _lineW,
+                    color: connectorColor,
+                  ),
+                ),
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    for (var i = 0; i < widget.node.children.length; i++)
+                      _CodingMindMapChildRow(
+                        child: widget.node.children[i],
+                        isDark: widget.isDark,
+                        depth: widget.depth + 1,
+                        accentIndex: i + widget.accentIndex + 1,
+                        connectorColor: connectorColor,
+                        connectorWidth: _connectorW,
+                        lineWidth: _lineW,
+                      ),
+                  ],
+                ),
+              ],
             ),
-            if (i != widget.node.children.length - 1)
-              Divider(
-                height: 8,
-                indent: (widget.depth + 1) * 10.0 + 12,
-                color:
-                    Colors.white.withValues(alpha: widget.isDark ? 0.04 : 0.06),
-              ),
-          ],
+          ),
         ],
       ],
     );
   }
+}
 
-  String _buildMetaText(_CodingMindMapNodeItem node) {
-    final parts = <String>[
-      if (node.action != null && node.action!.isNotEmpty) node.action!,
-      if (node.path != null && node.path!.isNotEmpty) p.basename(node.path!),
-      if (node.subtitle != null && node.subtitle!.isNotEmpty) node.subtitle!,
-    ];
-    return parts.join(' · ');
+class _CodingMindMapChildRow extends StatelessWidget {
+  const _CodingMindMapChildRow({
+    required this.child,
+    required this.isDark,
+    required this.depth,
+    required this.accentIndex,
+    required this.connectorColor,
+    required this.connectorWidth,
+    required this.lineWidth,
+  });
+
+  final _CodingMindMapNodeItem child;
+  final bool isDark;
+  final int depth;
+  final int accentIndex;
+  final Color connectorColor;
+  final double connectorWidth;
+  final double lineWidth;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 1),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Container(
+            margin: const EdgeInsets.only(top: 18),
+            width: connectorWidth,
+            height: lineWidth,
+            color: connectorColor,
+          ),
+          Expanded(
+            child: _CodingMindMapNodeTile(
+              node: child,
+              isDark: isDark,
+              depth: depth,
+              accentIndex: accentIndex,
+            ),
+          ),
+        ],
+      ),
+    );
   }
 }
 
@@ -2422,104 +2549,31 @@ class _ListDirTreePreviewState extends State<_ListDirTreePreview> {
   }
 }
 
-class _WriteFileContentPreview extends StatefulWidget {
+class _WriteFileContentPreview extends StatelessWidget {
   const _WriteFileContentPreview({
     required this.content,
     required this.isDark,
+    required this.compact,
+    required this.viewportHeight,
   });
 
   final String content;
   final bool isDark;
-
-  @override
-  State<_WriteFileContentPreview> createState() =>
-      _WriteFileContentPreviewState();
-}
-
-class _WriteFileContentPreviewState extends State<_WriteFileContentPreview> {
-  bool _open = false;
+  final bool compact;
+  final double viewportHeight;
 
   @override
   Widget build(BuildContext context) {
-    final titleColor = widget.isDark ? Colors.grey[300] : Colors.blueGrey[700];
-    final subColor = widget.isDark ? Colors.grey[400] : Colors.blueGrey[600];
-    final firstLine = widget.content.split('\n').firstWhere(
-          (line) => line.trim().isNotEmpty,
-          orElse: () => '',
-        );
-
-    return Container(
-      decoration: BoxDecoration(
-        color: widget.isDark
-            ? Colors.white.withValues(alpha: 0.02)
-            : Colors.blueGrey.withValues(alpha: 0.03),
-        borderRadius: BorderRadius.circular(8),
-        border: Border.all(
-          color: Colors.white.withValues(alpha: widget.isDark ? 0.06 : 0.1),
-        ),
-      ),
-      child: Column(
-        children: [
-          InkWell(
-            onTap: () => setState(() => _open = !_open),
-            borderRadius: BorderRadius.circular(8),
-            child: Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-              child: Row(
-                children: [
-                  const Icon(Icons.description_outlined,
-                      size: 15, color: Colors.blueGrey),
-                  const SizedBox(width: 6),
-                  Expanded(
-                    child: Text(
-                      _open
-                          ? 'Written content preview'
-                          : (firstLine.isEmpty
-                              ? 'Written content preview'
-                              : firstLine),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: TextStyle(
-                        fontSize: 11,
-                        fontWeight: FontWeight.w600,
-                        color: titleColor,
-                      ),
-                    ),
-                  ),
-                  Icon(
-                    _open ? Icons.expand_more : Icons.chevron_right,
-                    size: 16,
-                    color: subColor,
-                  ),
-                ],
-              ),
-            ),
-          ),
-          if (_open)
-            Padding(
-              padding: const EdgeInsets.fromLTRB(10, 0, 10, 10),
-              child: SingleChildScrollView(
-                scrollDirection: Axis.horizontal,
-                child: SelectableText(
-                  _truncateLines(widget.content, 80),
-                  style: TextStyle(
-                    fontFamily: 'monospace',
-                    fontSize: 10.5,
-                    height: 1.35,
-                    color: subColor,
-                  ),
-                ),
-              ),
-            ),
-        ],
-      ),
-    );
-  }
-
-  String _truncateLines(String content, int maxLines) {
     final lines = content.split('\n');
-    if (lines.length <= maxLines) return content;
-    return '${lines.take(maxLines).join('\n')}\n... (${lines.length - maxLines} more lines)';
+    return _ApplyDiffPreviewCard(
+      preview: _ApplyDiffPreview(
+        removedLines: const <String>[],
+        addedLines: lines,
+      ),
+      isDark: isDark,
+      compact: compact,
+      viewportHeight: viewportHeight,
+    );
   }
 }
 
@@ -2527,10 +2581,14 @@ class _ApplyDiffPreviewCard extends StatelessWidget {
   const _ApplyDiffPreviewCard({
     required this.preview,
     required this.isDark,
+    required this.compact,
+    required this.viewportHeight,
   });
 
   final _ApplyDiffPreview preview;
   final bool isDark;
+  final bool compact;
+  final double viewportHeight;
 
   @override
   Widget build(BuildContext context) {
@@ -2545,24 +2603,32 @@ class _ApplyDiffPreviewCard extends StatelessWidget {
           color: Colors.white.withValues(alpha: isDark ? 0.06 : 0.1),
         ),
       ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          if (preview.removedLines.isNotEmpty)
-            _DiffBlockSection(
-              lines: preview.removedLines,
-              color: Colors.red,
-              isDark: isDark,
-              prefix: '-',
-            ),
-          if (preview.addedLines.isNotEmpty)
-            _DiffBlockSection(
-              lines: preview.addedLines,
-              color: Colors.green,
-              isDark: isDark,
-              prefix: '+',
-            ),
-        ],
+      child: ConstrainedBox(
+        constraints: BoxConstraints(
+          maxHeight: viewportHeight,
+          minHeight: compact ? 90 : 140,
+        ),
+        child: SingleChildScrollView(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              if (preview.removedLines.isNotEmpty)
+                _DiffBlockSection(
+                  lines: preview.removedLines,
+                  color: Colors.red,
+                  isDark: isDark,
+                  prefix: '-',
+                ),
+              if (preview.addedLines.isNotEmpty)
+                _DiffBlockSection(
+                  lines: preview.addedLines,
+                  color: Colors.green,
+                  isDark: isDark,
+                  prefix: '+',
+                ),
+            ],
+          ),
+        ),
       ),
     );
   }
@@ -2583,6 +2649,8 @@ class _DiffBlockSection extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final blockText = lines.map((line) => '$prefix $line').join('\n');
+
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
@@ -2592,22 +2660,14 @@ class _DiffBlockSection extends StatelessWidget {
           left: BorderSide(color: color.withValues(alpha: 0.85), width: 2),
         ),
       ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          for (final line in lines)
-            Text(
-              '$prefix $line',
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              style: TextStyle(
-                fontFamily: 'monospace',
-                fontSize: 10.5,
-                height: 1.3,
-                color: isDark ? Colors.grey[200] : Colors.grey[900],
-              ),
-            ),
-        ],
+      child: SelectableText(
+        blockText,
+        style: TextStyle(
+          fontFamily: 'monospace',
+          fontSize: 10.5,
+          height: 1.3,
+          color: isDark ? Colors.grey[200] : Colors.grey[900],
+        ),
       ),
     );
   }
@@ -2645,90 +2705,50 @@ class _ThinkingToolBlockState extends State<_ThinkingToolBlock> {
 
   @override
   Widget build(BuildContext context) {
-    final borderColor = Colors.blue.withValues(alpha: 0.25);
-    final bgColor = widget.isDark
-        ? Colors.blue.withValues(alpha: 0.08)
-        : Colors.blue.withValues(alpha: 0.05);
-    final titleColor = widget.isDark ? Colors.blue[200] : Colors.blue[800];
     final subColor = widget.isDark ? Colors.grey[400] : Colors.blueGrey[600];
     final bodyBg =
         widget.isDark ? Colors.black.withValues(alpha: 0.20) : Colors.white;
     final preview = _buildPreview(widget.content);
+    final collapsedLine =
+        preview.isEmpty ? 'thinking: ...' : 'thinking: $preview';
 
     return Container(
       width: double.infinity,
-      margin: const EdgeInsets.symmetric(vertical: 6),
-      decoration: BoxDecoration(
-        color: bgColor,
-        borderRadius: BorderRadius.circular(10),
-        border: Border.all(color: borderColor),
-      ),
+      margin: const EdgeInsets.symmetric(vertical: 4),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           InkWell(
             onTap: () => setState(() => _expanded = !_expanded),
-            borderRadius: BorderRadius.circular(10),
+            borderRadius: BorderRadius.circular(6),
             child: Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+              padding: const EdgeInsets.symmetric(horizontal: 2, vertical: 4),
               child: Row(
                 children: [
                   Icon(
                     _expanded ? Icons.expand_more : Icons.chevron_right,
-                    size: 18,
+                    size: 15,
                     color: subColor,
                   ),
                   const SizedBox(width: 4),
-                  const Icon(Icons.psychology, size: 15, color: Colors.blue),
-                  const SizedBox(width: 8),
                   Expanded(
                     child: Text(
-                      'Thinking',
+                      collapsedLine,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
                       style: TextStyle(
-                        fontSize: 12,
-                        fontWeight: FontWeight.w600,
-                        color: titleColor,
+                        fontSize: 11,
+                        color: subColor,
                       ),
                     ),
                   ),
-                  if (!widget.isComplete)
-                    Container(
-                      padding: const EdgeInsets.symmetric(
-                          horizontal: 6, vertical: 2),
-                      decoration: BoxDecoration(
-                        color: Colors.blue.withValues(alpha: 0.12),
-                        borderRadius: BorderRadius.circular(999),
-                        border: Border.all(
-                            color: Colors.blue.withValues(alpha: 0.18)),
-                      ),
-                      child: Text(
-                        'streaming',
-                        style: TextStyle(
-                          fontSize: 10,
-                          color: titleColor,
-                        ),
-                      ),
-                    ),
                 ],
               ),
             ),
           ),
-          if (!_expanded && preview.isNotEmpty)
-            Padding(
-              padding: const EdgeInsets.fromLTRB(14, 0, 14, 8),
-              child: Text(
-                preview,
-                maxLines: 2,
-                overflow: TextOverflow.ellipsis,
-                style: TextStyle(
-                  fontSize: 10.5,
-                  color: subColor,
-                ),
-              ),
-            ),
           if (_expanded)
             Padding(
-              padding: const EdgeInsets.fromLTRB(10, 0, 10, 10),
+              padding: const EdgeInsets.fromLTRB(20, 0, 0, 8),
               child: Container(
                 width: double.infinity,
                 padding: const EdgeInsets.all(10),
@@ -2916,12 +2936,30 @@ class _EnhancedMarkdown extends StatelessWidget {
     final colorScheme = Theme.of(context).colorScheme;
 
     return MarkdownStyleSheet(
-      h1: textTheme.headlineLarge?.copyWith(fontWeight: FontWeight.bold),
-      h2: textTheme.headlineMedium?.copyWith(fontWeight: FontWeight.bold),
-      h3: textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.bold),
-      h4: textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w600),
-      h5: textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w600),
-      h6: textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w600),
+      h1: textTheme.titleLarge?.copyWith(
+        fontSize: 22,
+        fontWeight: FontWeight.bold,
+      ),
+      h2: textTheme.titleMedium?.copyWith(
+        fontSize: 20,
+        fontWeight: FontWeight.bold,
+      ),
+      h3: textTheme.titleMedium?.copyWith(
+        fontSize: 18,
+        fontWeight: FontWeight.bold,
+      ),
+      h4: textTheme.titleSmall?.copyWith(
+        fontSize: 16,
+        fontWeight: FontWeight.w600,
+      ),
+      h5: textTheme.bodyLarge?.copyWith(
+        fontSize: 15,
+        fontWeight: FontWeight.w600,
+      ),
+      h6: textTheme.bodyMedium?.copyWith(
+        fontSize: 14,
+        fontWeight: FontWeight.w600,
+      ),
       p: textTheme.bodyMedium,
       pPadding: const EdgeInsets.symmetric(vertical: 4),
       strong: textTheme.bodyMedium?.copyWith(fontWeight: FontWeight.bold),

@@ -36,6 +36,7 @@ class _GitDrawerState extends State<GitDrawer> {
   List<GitCommit> _logCommits = const [];
   List<GitCommit> _resetCandidates = const [];
   bool _initialLoading = true;
+  bool _worktreeActionLoading = false;
 
   String? _toastMessage;
   Color? _toastColor;
@@ -164,7 +165,8 @@ class _GitDrawerState extends State<GitDrawer> {
     final running = _runStatus.runningTaskCount > 0;
 
     return Drawer(
-      backgroundColor: isDark ? const Color(0xFF1E1E1E) : const Color(0xFFF5F5F5),
+      backgroundColor:
+          isDark ? const Color(0xFF1E1E1E) : const Color(0xFFF5F5F5),
       child: SafeArea(
         child: Stack(
           children: [
@@ -192,16 +194,20 @@ class _GitDrawerState extends State<GitDrawer> {
                                 accentColor: GitColors.success,
                                 isRunning: running,
                                 onPress: () => _runProjectOperation(
-                                  action: () => _git.startRun(command: 'npm start', taskName: 'npm start'),
+                                  action: () => _git.startRun(
+                                      command: 'npm start',
+                                      taskName: 'npm start'),
                                   successStatus: ProjectOpStatus.running,
                                   successFallback: '开发服务器已启动',
-                                  setStatus: (s) => setState(() => _npmStartStatus = s),
+                                  setStatus: (s) =>
+                                      setState(() => _npmStartStatus = s),
                                 ),
                                 onStop: () => _runProjectOperation(
                                   action: _git.stopAllRuns,
                                   successStatus: ProjectOpStatus.stopped,
                                   successFallback: '已停止所有服务',
-                                  setStatus: (s) => setState(() => _npmStartStatus = s),
+                                  setStatus: (s) =>
+                                      setState(() => _npmStartStatus = s),
                                 ),
                               ),
                               _buildProjectOpButton(
@@ -214,7 +220,8 @@ class _GitDrawerState extends State<GitDrawer> {
                                   action: _git.installDependencies,
                                   successStatus: ProjectOpStatus.idle,
                                   successFallback: '依赖安装完成',
-                                  setStatus: (s) => setState(() => _npmInstallStatus = s),
+                                  setStatus: (s) =>
+                                      setState(() => _npmInstallStatus = s),
                                 ),
                               ),
                               _buildProjectOpButton(
@@ -227,7 +234,8 @@ class _GitDrawerState extends State<GitDrawer> {
                                   action: _git.stopAllRuns,
                                   successStatus: ProjectOpStatus.stopped,
                                   successFallback: '已停止所有服务',
-                                  setStatus: (s) => setState(() => _npmStartStatus = s),
+                                  setStatus: (s) =>
+                                      setState(() => _npmStartStatus = s),
                                 ),
                               ),
                               const SizedBox(height: 16),
@@ -235,14 +243,17 @@ class _GitDrawerState extends State<GitDrawer> {
                               _buildGitOpButton(
                                 icon: Icons.download_rounded,
                                 label: 'Pull',
-                                sublabel: '从 origin/${summary?.branch ?? 'main'} 拉取并合并',
+                                sublabel:
+                                    '从 origin/${summary?.branch ?? 'main'} 拉取并合并',
                                 status: _pullStatus,
                                 accentColor: GitColors.pull,
                                 onPress: () => _runGitOperation(
-                                  action: () => _git.pull(branch: summary?.branch ?? 'main'),
+                                  action: () => _git.pull(
+                                      branch: summary?.branch ?? 'main'),
                                   currentStatus: _pullStatus,
                                   successFallback: '拉取完成',
-                                  setStatus: (s) => setState(() => _pullStatus = s),
+                                  setStatus: (s) =>
+                                      setState(() => _pullStatus = s),
                                 ),
                               ),
                               _buildGitOpButton(
@@ -283,7 +294,8 @@ class _GitDrawerState extends State<GitDrawer> {
                                   action: _git.stash,
                                   currentStatus: _stashStatus,
                                   successFallback: '更改已暂存',
-                                  setStatus: (s) => setState(() => _stashStatus = s),
+                                  setStatus: (s) =>
+                                      setState(() => _stashStatus = s),
                                 ),
                               ),
                               _buildGitOpButton(
@@ -296,7 +308,8 @@ class _GitDrawerState extends State<GitDrawer> {
                                   action: _git.stashPop,
                                   currentStatus: _stashPopStatus,
                                   successFallback: '更改已恢复',
-                                  setStatus: (s) => setState(() => _stashPopStatus = s),
+                                  setStatus: (s) =>
+                                      setState(() => _stashPopStatus = s),
                                 ),
                               ),
                               _buildGitOpButton(
@@ -337,11 +350,14 @@ class _GitDrawerState extends State<GitDrawer> {
     );
   }
 
-  Widget _buildHeader(ThemeData theme, bool isDark, String currentBranch, GitSummary? summary) {
+  Widget _buildHeader(
+      ThemeData theme, bool isDark, String currentBranch, GitSummary? summary) {
     return Container(
       padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
       decoration: BoxDecoration(
-        border: Border(bottom: BorderSide(color: isDark ? Colors.white12 : Colors.black12)),
+        border: Border(
+            bottom:
+                BorderSide(color: isDark ? Colors.white12 : Colors.black12)),
       ),
       child: Row(
         children: [
@@ -354,7 +370,8 @@ class _GitDrawerState extends State<GitDrawer> {
             child: Row(
               mainAxisSize: MainAxisSize.min,
               children: [
-                Icon(Icons.account_tree_rounded, size: 14, color: theme.colorScheme.primary),
+                Icon(Icons.account_tree_rounded,
+                    size: 14, color: theme.colorScheme.primary),
                 const SizedBox(width: 6),
                 Text(
                   currentBranch,
@@ -430,7 +447,8 @@ class _GitDrawerState extends State<GitDrawer> {
             opacity: isLoading ? 0.6 : 1.0,
             child: Container(
               padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
-              decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(12)),
+              decoration: BoxDecoration(
+                  color: Colors.white, borderRadius: BorderRadius.circular(12)),
               child: Row(
                 children: [
                   Container(
@@ -447,11 +465,14 @@ class _GitDrawerState extends State<GitDrawer> {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Text(label, style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w600)),
+                        Text(label,
+                            style: const TextStyle(
+                                fontSize: 15, fontWeight: FontWeight.w600)),
                         const SizedBox(height: 1),
                         Text(
                           sublabel,
-                          style: TextStyle(fontSize: 12, color: Colors.grey[600]),
+                          style:
+                              TextStyle(fontSize: 12, color: Colors.grey[600]),
                           overflow: TextOverflow.ellipsis,
                         ),
                       ],
@@ -475,12 +496,14 @@ class _GitDrawerState extends State<GitDrawer> {
         return const SizedBox(
           width: 16,
           height: 16,
-          child: CircularProgressIndicator(strokeWidth: 2, color: GitColors.warning),
+          child: CircularProgressIndicator(
+              strokeWidth: 2, color: GitColors.warning),
         );
       case GitOpStatus.success:
         return const Icon(Icons.check, size: 16, color: GitColors.success);
       case GitOpStatus.error:
-        return const Icon(Icons.warning_rounded, size: 16, color: GitColors.error);
+        return const Icon(Icons.warning_rounded,
+            size: 16, color: GitColors.error);
     }
   }
 
@@ -501,12 +524,15 @@ class _GitDrawerState extends State<GitDrawer> {
         color: Colors.transparent,
         child: InkWell(
           borderRadius: BorderRadius.circular(12),
-          onTap: showLoading ? null : (isRunning && onStop != null ? onStop : onPress),
+          onTap: showLoading
+              ? null
+              : (isRunning && onStop != null ? onStop : onPress),
           child: Opacity(
             opacity: showLoading ? 0.6 : 1.0,
             child: Container(
               padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
-              decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(12)),
+              decoration: BoxDecoration(
+                  color: Colors.white, borderRadius: BorderRadius.circular(12)),
               child: Row(
                 children: [
                   Container(
@@ -523,17 +549,21 @@ class _GitDrawerState extends State<GitDrawer> {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Text(label, style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w600)),
+                        Text(label,
+                            style: const TextStyle(
+                                fontSize: 15, fontWeight: FontWeight.w600)),
                         const SizedBox(height: 1),
                         Text(
                           sublabel,
-                          style: TextStyle(fontSize: 12, color: Colors.grey[600]),
+                          style:
+                              TextStyle(fontSize: 12, color: Colors.grey[600]),
                           overflow: TextOverflow.ellipsis,
                         ),
                       ],
                     ),
                   ),
-                  _buildProjectStatusIcon(status, isRunning: isRunning, showLoading: showLoading),
+                  _buildProjectStatusIcon(status,
+                      isRunning: isRunning, showLoading: showLoading),
                 ],
               ),
             ),
@@ -555,12 +585,16 @@ class _GitDrawerState extends State<GitDrawer> {
           Container(
             width: 8,
             height: 8,
-            decoration: const BoxDecoration(color: GitColors.success, shape: BoxShape.circle),
+            decoration: const BoxDecoration(
+                color: GitColors.success, shape: BoxShape.circle),
           ),
           const SizedBox(width: 6),
           const Text(
             '运行中',
-            style: TextStyle(fontSize: 12, color: GitColors.success, fontWeight: FontWeight.w600),
+            style: TextStyle(
+                fontSize: 12,
+                color: GitColors.success,
+                fontWeight: FontWeight.w600),
           ),
         ],
       );
@@ -569,12 +603,14 @@ class _GitDrawerState extends State<GitDrawer> {
       return const SizedBox(
         width: 16,
         height: 16,
-        child: CircularProgressIndicator(strokeWidth: 2, color: GitColors.warning),
+        child:
+            CircularProgressIndicator(strokeWidth: 2, color: GitColors.warning),
       );
     }
     switch (status) {
       case ProjectOpStatus.stopped:
-        return Icon(Icons.stop_circle_outlined, size: 16, color: Colors.grey[400]);
+        return Icon(Icons.stop_circle_outlined,
+            size: 16, color: Colors.grey[400]);
       case ProjectOpStatus.idle:
       case ProjectOpStatus.running:
         return Icon(Icons.chevron_right, size: 18, color: Colors.grey[400]);
@@ -593,52 +629,96 @@ class _GitDrawerState extends State<GitDrawer> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(
-            '工作树状态',
-            style: TextStyle(
-              fontSize: 12,
-              color: Colors.grey[600],
-              fontWeight: FontWeight.w600,
-              letterSpacing: 0.5,
-            ),
+          Row(
+            children: [
+              Text(
+                '工作树状态',
+                style: TextStyle(
+                  fontSize: 12,
+                  color: Colors.grey[600],
+                  fontWeight: FontWeight.w600,
+                  letterSpacing: 0.5,
+                ),
+              ),
+              const Spacer(),
+              if (files.isNotEmpty)
+                TextButton.icon(
+                  onPressed: _worktreeActionLoading
+                      ? null
+                      : () => _discardAllWorktreeChanges(context),
+                  style: TextButton.styleFrom(
+                    foregroundColor: GitColors.error,
+                    visualDensity: VisualDensity.compact,
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                  ),
+                  icon: const Icon(Icons.delete_sweep_rounded, size: 16),
+                  label: const Text(
+                    'Discard All Changes',
+                    style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600),
+                  ),
+                ),
+            ],
           ),
+          if (_worktreeActionLoading)
+            const Padding(
+              padding: EdgeInsets.only(top: 8),
+              child: LinearProgressIndicator(minHeight: 2),
+            ),
           const SizedBox(height: 10),
           if (files.isEmpty)
-            Text('工作树干净', style: TextStyle(fontSize: 12, color: Colors.grey[600])),
+            Text('工作树干净',
+                style: TextStyle(fontSize: 12, color: Colors.grey[600])),
           ...files.take(8).map((f) => Padding(
                 padding: const EdgeInsets.symmetric(vertical: 4),
-                child: Row(
-                  children: [
-                    Container(
-                      width: 6,
-                      height: 6,
-                      decoration: BoxDecoration(
-                        color: _statusColor(f.statusCode),
-                        shape: BoxShape.circle,
+                child: Material(
+                  color: Colors.transparent,
+                  child: InkWell(
+                    borderRadius: BorderRadius.circular(8),
+                    onTap: _worktreeActionLoading
+                        ? null
+                        : () => _showWorktreeFileActions(context, f),
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 6, vertical: 6),
+                      child: Row(
+                        children: [
+                          Container(
+                            width: 6,
+                            height: 6,
+                            decoration: BoxDecoration(
+                              color: _statusColor(f.statusCode),
+                              shape: BoxShape.circle,
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: Text(
+                              f.path,
+                              style: TextStyle(
+                                fontSize: 12,
+                                fontFamily: 'monospace',
+                                color: isDark ? Colors.white : Colors.black87,
+                              ),
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          Text(
+                            f.statusCode.toUpperCase(),
+                            style: TextStyle(
+                              fontSize: 11,
+                              fontWeight: FontWeight.w700,
+                              color: _statusColor(f.statusCode),
+                            ),
+                          ),
+                          const SizedBox(width: 6),
+                          Icon(Icons.more_horiz_rounded,
+                              size: 16, color: Colors.grey[500]),
+                        ],
                       ),
                     ),
-                    const SizedBox(width: 8),
-                    Expanded(
-                      child: Text(
-                        f.path,
-                        style: TextStyle(
-                          fontSize: 12,
-                          fontFamily: 'monospace',
-                          color: isDark ? Colors.white : Colors.black87,
-                        ),
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                    ),
-                    const SizedBox(width: 8),
-                    Text(
-                      f.statusCode.toUpperCase(),
-                      style: TextStyle(
-                        fontSize: 11,
-                        fontWeight: FontWeight.w700,
-                        color: _statusColor(f.statusCode),
-                      ),
-                    ),
-                  ],
+                  ),
                 ),
               )),
           if (files.length > 8) ...[
@@ -665,6 +745,183 @@ class _GitDrawerState extends State<GitDrawer> {
     }
   }
 
+  Future<void> _discardAllWorktreeChanges(BuildContext context) async {
+    final confirmed = await _showConfirmDialog(
+      context,
+      title: 'Discard All Changes',
+      message: '这会丢弃所有未提交改动。该操作不可撤销，是否继续？',
+      confirmLabel: '确认全部丢弃',
+      destructive: true,
+    );
+    if (confirmed != true) return;
+
+    setState(() => _worktreeActionLoading = true);
+    final result = await _git.discardAllChanges();
+    if (!mounted) return;
+    setState(() => _worktreeActionLoading = false);
+    if (result.success) {
+      _showToast(result.message.isNotEmpty ? result.message : '已丢弃全部改动');
+      unawaited(_refreshSliderData());
+      return;
+    }
+    _showToast(result.message, color: GitColors.error);
+  }
+
+  Future<void> _discardSingleFile(
+    BuildContext context,
+    GitWorktreeFile file,
+  ) async {
+    final confirmed = await _showConfirmDialog(
+      context,
+      title: 'Discard changes',
+      message: '将丢弃 `${file.path}` 的改动，是否继续？',
+      confirmLabel: '确认丢弃',
+      destructive: true,
+    );
+    if (confirmed != true) return;
+
+    setState(() => _worktreeActionLoading = true);
+    final result = await _git.discardFileChanges(filePath: file.path);
+    if (!mounted) return;
+    setState(() => _worktreeActionLoading = false);
+    if (result.success) {
+      _showToast(
+          result.message.isNotEmpty ? result.message : '已丢弃 ${file.path} 的改动');
+      unawaited(_refreshSliderData());
+      return;
+    }
+    _showToast(result.message, color: GitColors.error);
+  }
+
+  Future<void> _showWorktreeFileActions(
+    BuildContext context,
+    GitWorktreeFile file,
+  ) async {
+    await showModalBottomSheet<void>(
+      context: context,
+      backgroundColor: Colors.transparent,
+      builder: (sheetContext) {
+        final isDark = Theme.of(sheetContext).brightness == Brightness.dark;
+        return Container(
+          decoration: BoxDecoration(
+            color: isDark ? const Color(0xFF1E1E1E) : Colors.white,
+            borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
+          ),
+          child: SafeArea(
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(20, 12, 20, 20),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  Container(
+                    width: 36,
+                    height: 4,
+                    margin: const EdgeInsets.only(bottom: 12),
+                    decoration: BoxDecoration(
+                      color: Colors.grey[400],
+                      borderRadius: BorderRadius.circular(2),
+                    ),
+                  ),
+                  Text(
+                    file.path,
+                    style: TextStyle(
+                      fontSize: 13,
+                      fontFamily: 'monospace',
+                      color: isDark ? Colors.white : Colors.black87,
+                    ),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    '状态: ${file.statusCode.toUpperCase()}',
+                    style: TextStyle(fontSize: 12, color: Colors.grey[600]),
+                  ),
+                  const SizedBox(height: 16),
+                  OutlinedButton.icon(
+                    onPressed: () async {
+                      Navigator.pop(sheetContext);
+                      await _viewFileChanges(context, file);
+                    },
+                    icon: const Icon(Icons.visibility_rounded, size: 18),
+                    label: const Text('View changes'),
+                  ),
+                  const SizedBox(height: 8),
+                  FilledButton.icon(
+                    style: FilledButton.styleFrom(
+                      backgroundColor: GitColors.error,
+                    ),
+                    onPressed: () async {
+                      Navigator.pop(sheetContext);
+                      await _discardSingleFile(context, file);
+                    },
+                    icon: const Icon(Icons.restore_rounded, size: 18),
+                    label: const Text('Discard changes'),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  Future<void> _viewFileChanges(
+      BuildContext context, GitWorktreeFile file) async {
+    try {
+      setState(() => _worktreeActionLoading = true);
+      final diff = await _git.getFileDiff(filePath: file.path);
+      if (!mounted) return;
+      setState(() => _worktreeActionLoading = false);
+      if (!mounted) return;
+      await showModalBottomSheet<void>(
+        context: context,
+        isScrollControlled: true,
+        enableDrag: true,
+        backgroundColor: Colors.transparent,
+        builder: (modalContext) => FractionallySizedBox(
+          heightFactor: 0.9,
+          child: FileDiffModal(diff: diff),
+        ),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      setState(() => _worktreeActionLoading = false);
+      _showToast('加载文件改动失败: $e', color: GitColors.error);
+    }
+  }
+
+  Future<bool?> _showConfirmDialog(
+    BuildContext context, {
+    required String title,
+    required String message,
+    required String confirmLabel,
+    bool destructive = false,
+  }) {
+    return showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: Text(title),
+        content: Text(message),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext, false),
+            child: const Text('取消'),
+          ),
+          FilledButton(
+            style: FilledButton.styleFrom(
+              backgroundColor: destructive
+                  ? GitColors.error
+                  : Theme.of(context).colorScheme.primary,
+            ),
+            onPressed: () => Navigator.pop(dialogContext, true),
+            child: Text(confirmLabel),
+          ),
+        ],
+      ),
+    );
+  }
+
   Widget _buildToast() {
     return Material(
       color: Colors.transparent,
@@ -684,7 +941,9 @@ class _GitDrawerState extends State<GitDrawer> {
         child: Row(
           children: [
             Icon(
-              _toastColor == GitColors.error ? Icons.error_outline : Icons.check_circle_outline,
+              _toastColor == GitColors.error
+                  ? Icons.error_outline
+                  : Icons.check_circle_outline,
               color: Colors.white,
               size: 20,
             ),
@@ -692,7 +951,10 @@ class _GitDrawerState extends State<GitDrawer> {
             Expanded(
               child: Text(
                 _toastMessage ?? '',
-                style: const TextStyle(color: Colors.white, fontSize: 14, fontWeight: FontWeight.w500),
+                style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 14,
+                    fontWeight: FontWeight.w500),
               ),
             ),
           ],
@@ -711,7 +973,8 @@ class _GitDrawerState extends State<GitDrawer> {
         onConfirm: (message, filePaths, addAll) async {
           Navigator.pop(context);
           await _runGitOperation(
-            action: () => _git.commit(message: message, filePaths: filePaths, addAll: addAll),
+            action: () => _git.commit(
+                message: message, filePaths: filePaths, addAll: addAll),
             currentStatus: _commitStatus,
             successFallback: '提交成功',
             setStatus: (s) => setState(() => _commitStatus = s),
@@ -738,18 +1001,23 @@ class _GitDrawerState extends State<GitDrawer> {
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
+      enableDrag: true,
+      isDismissible: true,
       backgroundColor: Colors.transparent,
-      builder: (context) => ResetModal(
-        commits: _resetCandidates,
-        onConfirm: (commit, type) async {
-          Navigator.pop(context);
-          await _runGitOperation(
-            action: () => _git.reset(hash: commit.hash, mode: type),
-            currentStatus: _resetStatus,
-            successFallback: '已重置到 ${commit.shortHash}',
-            setStatus: (s) => setState(() => _resetStatus = s),
-          );
-        },
+      builder: (context) => FractionallySizedBox(
+        heightFactor: 0.9,
+        child: ResetModal(
+          commits: _resetCandidates,
+          onConfirm: (commit, type) async {
+            Navigator.pop(context);
+            await _runGitOperation(
+              action: () => _git.reset(hash: commit.hash, mode: type),
+              currentStatus: _resetStatus,
+              successFallback: '已重置到 ${commit.shortHash}',
+              setStatus: (s) => setState(() => _resetStatus = s),
+            );
+          },
+        ),
       ),
     );
   }
@@ -765,7 +1033,8 @@ class _GitDrawerState extends State<GitDrawer> {
       return;
     }
 
-    final preview = _pushPreview ?? GitPushSummary(branch: _summary?.branch ?? 'main', aheadCount: 0);
+    final preview = _pushPreview ??
+        GitPushSummary(branch: _summary?.branch ?? 'main', aheadCount: 0);
     if (!mounted) return;
     showModalBottomSheet(
       context: context,
@@ -778,7 +1047,8 @@ class _GitDrawerState extends State<GitDrawer> {
         onConfirm: () async {
           Navigator.pop(context);
           await _runGitOperation(
-            action: () => _git.push(branch: preview.branch, remote: preview.remote),
+            action: () =>
+                _git.push(branch: preview.branch, remote: preview.remote),
             currentStatus: _pushStatus,
             successFallback: '推送完成',
             setStatus: (s) => setState(() => _pushStatus = s),
