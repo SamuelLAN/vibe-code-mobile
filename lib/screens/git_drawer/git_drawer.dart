@@ -173,7 +173,7 @@ class _GitDrawerState extends State<GitDrawer> {
             Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                _buildHeader(theme, isDark, currentBranch, summary),
+                _buildHeader(theme, isDark, currentBranch, summary, running),
                 Expanded(
                   child: _initialLoading
                       ? const Center(child: CircularProgressIndicator())
@@ -186,7 +186,7 @@ class _GitDrawerState extends State<GitDrawer> {
                               _buildSectionTitle('项目运行'),
                               _buildProjectOpButton(
                                 icon: Icons.play_arrow_rounded,
-                                label: 'npm start',
+                                label: 'npm run dev',
                                 sublabel: running
                                     ? '${_runStatus.runningTaskCount} 个任务运行中'
                                     : '启动开发服务器',
@@ -194,9 +194,7 @@ class _GitDrawerState extends State<GitDrawer> {
                                 accentColor: GitColors.success,
                                 isRunning: running,
                                 onPress: () => _runProjectOperation(
-                                  action: () => _git.startRun(
-                                      command: 'npm start',
-                                      taskName: 'npm start'),
+                                  action: _git.startRun,
                                   successStatus: ProjectOpStatus.running,
                                   successFallback: '开发服务器已启动',
                                   setStatus: (s) =>
@@ -351,7 +349,12 @@ class _GitDrawerState extends State<GitDrawer> {
   }
 
   Widget _buildHeader(
-      ThemeData theme, bool isDark, String currentBranch, GitSummary? summary) {
+    ThemeData theme,
+    bool isDark,
+    String currentBranch,
+    GitSummary? summary,
+    bool isRunning,
+  ) {
     return Container(
       padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
       decoration: BoxDecoration(
@@ -378,6 +381,35 @@ class _GitDrawerState extends State<GitDrawer> {
                   style: TextStyle(
                     color: theme.colorScheme.primary,
                     fontSize: 13,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(width: 8),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+            decoration: BoxDecoration(
+              color: isRunning
+                  ? GitColors.success.withOpacity(0.12)
+                  : (isDark ? Colors.white10 : Colors.black.withOpacity(0.05)),
+              borderRadius: BorderRadius.circular(10),
+            ),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(
+                  isRunning ? Icons.play_circle_fill_rounded : Icons.stop_circle,
+                  size: 13,
+                  color: isRunning ? GitColors.success : Colors.grey[600],
+                ),
+                const SizedBox(width: 4),
+                Text(
+                  isRunning ? '运行中' : '已停止',
+                  style: TextStyle(
+                    color: isRunning ? GitColors.success : Colors.grey[600],
+                    fontSize: 12,
                     fontWeight: FontWeight.w600,
                   ),
                 ),

@@ -33,18 +33,6 @@ class GitService extends ChangeNotifier {
   }
 
   Future<GitSummary> getSummary() async {
-    final mock = await _settings.getGitMockMode();
-    if (mock) {
-      _log('GET /vibe/git/summary -> mock mode enabled');
-      return GitSummary(
-        branch: 'main',
-        aheadCount: 3,
-        behindCount: 0,
-        changedFileCount: 4,
-        runningTaskCount: 1,
-      );
-    }
-
     final response = await _get('/vibe/git/summary');
     if (!response.success) throw Exception(response.message);
     final data = _payloadAsMap(response.details);
@@ -66,18 +54,6 @@ class GitService extends ChangeNotifier {
   }
 
   Future<GitRunStatus> getRunStatus() async {
-    final mock = await _settings.getGitMockMode();
-    if (mock) {
-      _log('GET /vibe/git/project/run/status -> mock mode enabled');
-      return GitRunStatus(
-        runningTaskCount: 1,
-        tasks: [
-          GitRunTask(
-              taskName: 'npm start', command: 'npm start', status: 'running'),
-        ],
-      );
-    }
-
     final response = await _get('/vibe/git/project/run/status');
     if (!response.success) throw Exception(response.message);
     final payload = _payload(response.details);
@@ -109,18 +85,12 @@ class GitService extends ChangeNotifier {
   }
 
   Future<GitOperationResult> startRun({
-    required String command,
-    required String taskName,
     String? projectName,
   }) async {
     final effectiveProjectName = await _effectiveProjectName(projectName);
     return _post(
       '/vibe/git/project/run/start',
-      body: {
-        'project_name': effectiveProjectName,
-        'command': command,
-        'task_name': taskName,
-      },
+      body: {'project_name': effectiveProjectName},
     );
   }
 
@@ -167,11 +137,6 @@ class GitService extends ChangeNotifier {
     String? projectName,
   }) async {
     final effectiveProjectName = await _effectiveProjectName(projectName);
-    final mock = await _settings.getGitMockMode();
-    if (mock) {
-      _log('GET /vibe/git/sync/push/preview -> mock mode enabled');
-      return GitPushSummary(branch: 'main', aheadCount: 2, remote: remote);
-    }
 
     final response = await _get(
       '/vibe/git/sync/push/preview',
@@ -229,11 +194,6 @@ class GitService extends ChangeNotifier {
     List<String>? filePaths,
   }) async {
     final effectiveProjectName = await _effectiveProjectName(projectName);
-    final mock = await _settings.getGitMockMode();
-    if (mock) {
-      _log('POST /vibe/git/change/commit/generate-message -> mock mode enabled');
-      return 'chore: update project files';
-    }
 
     final response = await _post(
       '/vibe/git/change/commit/generate-message',
@@ -261,24 +221,6 @@ class GitService extends ChangeNotifier {
     String? projectName,
   }) async {
     final effectiveProjectName = await _effectiveProjectName(projectName);
-    final mock = await _settings.getGitMockMode();
-    if (mock) {
-      _log('GET /vibe/git/change/reset/candidates -> mock mode enabled');
-      return [
-        GitCommit(
-          hash: 'a1b2c3d4',
-          message: 'Add chat history persistence',
-          date: DateTime.now().subtract(const Duration(hours: 2)),
-          author: 'Dev',
-        ),
-        GitCommit(
-          hash: 'b2c3d4e5',
-          message: 'Implement voice input mode',
-          date: DateTime.now().subtract(const Duration(hours: 5)),
-          author: 'Dev',
-        ),
-      ];
-    }
 
     final response = await _get(
       '/vibe/git/change/reset/candidates',
@@ -297,7 +239,7 @@ class GitService extends ChangeNotifier {
     String? projectName,
   }) async {
     final effectiveProjectName = await _effectiveProjectName(projectName);
-    return _post(
+    final primary = await _post(
       '/vibe/git/change/reset',
       body: {
         'project_name': effectiveProjectName,
@@ -305,6 +247,23 @@ class GitService extends ChangeNotifier {
         'mode': mode,
       },
     );
+    if (primary.success) return primary;
+
+    final msg = primary.message.toLowerCase();
+    final likelyFieldMismatch = msg.contains('revision') ||
+        msg.contains('commit_hash') ||
+        msg.contains('hash');
+    if (!likelyFieldMismatch) return primary;
+
+    final fallback = await _post(
+      '/vibe/git/change/reset',
+      body: {
+        'project_name': effectiveProjectName,
+        'revision': hash,
+        'mode': mode,
+      },
+    );
+    return fallback.success ? fallback : primary;
   }
 
   Future<GitOperationResult> stash({
@@ -341,11 +300,6 @@ class GitService extends ChangeNotifier {
     String? projectName,
   }) async {
     final effectiveProjectName = await _effectiveProjectName(projectName);
-    final mock = await _settings.getGitMockMode();
-    if (mock) {
-      _log('GET /vibe/git/advanced/branches -> mock mode enabled');
-      return ['main', 'develop', 'feature/voice-input', 'release/v1.0'];
-    }
 
     final response = await _get(
       '/vibe/git/advanced/branches',
@@ -380,30 +334,6 @@ class GitService extends ChangeNotifier {
     String? projectName,
   }) async {
     final effectiveProjectName = await _effectiveProjectName(projectName);
-    final mock = await _settings.getGitMockMode();
-    if (mock) {
-      _log('GET /vibe/git/advanced/log -> mock mode enabled');
-      return [
-        GitCommit(
-          hash: '8a1f3c2',
-          message: 'Improve chat rendering',
-          date: DateTime.now().subtract(const Duration(days: 1)),
-          author: 'Dev',
-        ),
-        GitCommit(
-          hash: 'c4d9b21',
-          message: 'Wire up git drawer UI',
-          date: DateTime.now().subtract(const Duration(days: 2)),
-          author: 'Dev',
-        ),
-        GitCommit(
-          hash: '5f77ab0',
-          message: 'Add auth gate',
-          date: DateTime.now().subtract(const Duration(days: 4)),
-          author: 'Dev',
-        ),
-      ];
-    }
 
     final response = await _get(
       '/vibe/git/advanced/log',
@@ -420,20 +350,6 @@ class GitService extends ChangeNotifier {
     String? projectName,
   }) async {
     final effectiveProjectName = await _effectiveProjectName(projectName);
-    final mock = await _settings.getGitMockMode();
-    if (mock) {
-      _log('GET /vibe/git/worktree/status -> mock mode enabled');
-      return GitWorktreeStatus(
-        files: [
-          GitWorktreeFile(
-              path: 'lib/screens/chat_screen.dart', statusCode: 'M'),
-          GitWorktreeFile(path: 'lib/widgets/input_bar.dart', statusCode: 'M'),
-          GitWorktreeFile(path: 'lib/models/message.dart', statusCode: 'A'),
-          GitWorktreeFile(path: 'assets/logo.png', statusCode: 'D'),
-        ],
-        counts: const {'M': 2, 'A': 1, 'D': 1},
-      );
-    }
 
     final response = await _get(
       '/vibe/git/worktree/status',
@@ -500,36 +416,6 @@ class GitService extends ChangeNotifier {
     int contextLines = 3,
   }) async {
     final effectiveProjectName = await _effectiveProjectName(projectName);
-    final mock = await _settings.getGitMockMode();
-    if (mock) {
-      _log('POST /vibe/git/worktree/view-changes -> mock mode enabled');
-      return GitFileDiff(
-        path: filePath,
-        beforeContent: '''
-class Example {
-  void run() {
-    print('old');
-  }
-}
-''',
-        afterContent: '''
-class Example {
-  void run() {
-    print('new');
-  }
-}
-''',
-        patch: '''
-@@ -2,5 +2,5 @@
- class Example {
-   void run() {
--    print('old');
-+    print('new');
-   }
- }
-''',
-      );
-    }
 
     final response = await _post(
       '/vibe/git/worktree/view-changes',
@@ -555,14 +441,6 @@ class Example {
     String path, {
     required Map<String, dynamic> body,
   }) async {
-    final mock = await _settings.getGitMockMode();
-    if (mock) {
-      await Future<void>.delayed(const Duration(milliseconds: 300));
-      final opName = path.split('/').where((e) => e.isNotEmpty).last;
-      _log('POST $path -> mock mode enabled, body=${jsonEncode(body)}');
-      return GitOperationResult(
-          success: true, message: 'Mock $opName complete.');
-    }
     return _request(method: 'POST', path: path, body: body);
   }
 
@@ -590,10 +468,7 @@ class Example {
       ...?query,
       if (repoPath != null && repoPath.isNotEmpty) 'repo_path': repoPath,
     };
-    final requestBody = <String, dynamic>{
-      ...?body,
-      if (repoPath != null && repoPath.isNotEmpty) 'repo_path': repoPath,
-    };
+    final requestBody = <String, dynamic>{...?body};
 
     _log(
       '$method $path start '
@@ -672,18 +547,28 @@ class Example {
   }
 
   GitCommit _parseCommit(Map<String, dynamic> item) {
-    final hash =
-        _readString(item, ['hash', 'commit_hash', 'id'], fallback: 'unknown');
-    final message = _readString(item, ['message', 'subject'], fallback: '');
+    final hash = _readString(
+      item,
+      ['hash', 'commit_hash', 'revision', 'sha', 'oid', 'id'],
+      fallback: 'unknown',
+    );
+    final message = _readString(
+      item,
+      ['message', 'subject', 'title', 'summary'],
+      fallback: '',
+    );
     final dateStr = _nullableString(item['date']) ??
+        _nullableString(item['commit_date']) ??
         _nullableString(item['timestamp']) ??
-        _nullableString(item['committed_at']);
+        _nullableString(item['committed_at']) ??
+        _nullableString(item['commit_time']);
     return GitCommit(
       hash: hash,
       message: message,
       date: _parseDate(dateStr),
       author: _nullableString(item['author']) ??
-          _nullableString(item['author_name']),
+          _nullableString(item['author_name']) ??
+          _nullableString(item['committer']),
     );
   }
 

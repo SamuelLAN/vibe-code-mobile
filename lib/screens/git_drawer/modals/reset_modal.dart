@@ -18,13 +18,35 @@ class ResetModal extends StatefulWidget {
 }
 
 class _ResetModalState extends State<ResetModal> {
-  GitCommit? _selected;
+  int? _selectedIndex;
   String _resetType = 'mixed';
+
+  @override
+  void initState() {
+    super.initState();
+    if (widget.commits.isNotEmpty) {
+      _selectedIndex = 0;
+    }
+  }
+
+  @override
+  void didUpdateWidget(covariant ResetModal oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (widget.commits.isEmpty) {
+      _selectedIndex = null;
+      return;
+    }
+    final selected = _selectedIndex;
+    if (selected == null || selected >= widget.commits.length) {
+      _selectedIndex = 0;
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
-    final selected = _selected;
+    final selected =
+        _selectedIndex == null ? null : widget.commits[_selectedIndex!];
 
     return Container(
       decoration: BoxDecoration(
@@ -153,56 +175,105 @@ class _ResetModalState extends State<ResetModal> {
                       ),
                     ),
                     const SizedBox(height: 12),
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Text(
+                          '选择目标 Revision',
+                          style: TextStyle(
+                            fontSize: 12,
+                            fontWeight: FontWeight.w600,
+                            color: Colors.grey[600],
+                          ),
+                        ),
+                        if (widget.commits.isNotEmpty)
+                          Text(
+                            '${widget.commits.length} 个可选',
+                            style: TextStyle(
+                              fontSize: 11,
+                              color: Colors.grey[500],
+                            ),
+                          ),
+                      ],
+                    ),
+                    const SizedBox(height: 8),
                     Expanded(
                       child: widget.commits.isEmpty
                           ? Center(
                               child: Text('暂无可重置提交',
                                   style: TextStyle(color: Colors.grey[600])),
                             )
-                          : ListView(
-                              children: widget.commits.map((c) {
-                                final isSelected = _selected?.hash == c.hash;
+                          : ListView.separated(
+                              itemCount: widget.commits.length,
+                              separatorBuilder: (_, __) =>
+                                  const SizedBox(height: 6),
+                              itemBuilder: (context, index) {
+                                final commit = widget.commits[index];
+                                final isSelected = _selectedIndex == index;
                                 return InkWell(
-                                  onTap: () => setState(() => _selected = c),
-                                  child: Container(
+                                  key: ValueKey(
+                                      'reset-candidate-${commit.hash}-$index'),
+                                  borderRadius: BorderRadius.circular(10),
+                                  onTap: () =>
+                                      setState(() => _selectedIndex = index),
+                                  child: AnimatedContainer(
+                                    duration: const Duration(milliseconds: 120),
                                     padding: const EdgeInsets.all(12),
-                                    margin: const EdgeInsets.only(bottom: 4),
                                     decoration: BoxDecoration(
                                       color: isSelected
                                           ? Theme.of(context)
                                               .colorScheme
                                               .primary
                                               .withOpacity(0.1)
-                                          : null,
-                                      borderRadius: BorderRadius.circular(8),
+                                          : (isDark
+                                              ? Colors.white10
+                                              : Colors.grey[50]),
+                                      borderRadius: BorderRadius.circular(10),
                                       border: Border.all(
                                         color: isSelected
                                             ? Theme.of(context)
                                                 .colorScheme
                                                 .primary
-                                            : Colors.transparent,
+                                            : (isDark
+                                                ? Colors.white24
+                                                : Colors.grey[300]!),
                                       ),
                                     ),
                                     child: Row(
                                       children: [
+                                        Icon(
+                                          isSelected
+                                              ? Icons.radio_button_checked
+                                              : Icons.radio_button_unchecked,
+                                          size: 20,
+                                          color: isSelected
+                                              ? Theme.of(context)
+                                                  .colorScheme
+                                                  .primary
+                                              : Colors.grey[500],
+                                        ),
+                                        const SizedBox(width: 10),
                                         Expanded(
                                           child: Column(
                                             crossAxisAlignment:
                                                 CrossAxisAlignment.start,
                                             children: [
                                               Text(
-                                                c.shortHash,
+                                                commit.shortHash,
                                                 style: TextStyle(
                                                   fontSize: 12,
                                                   fontFamily: 'monospace',
                                                   color: Theme.of(context)
                                                       .colorScheme
                                                       .primary,
+                                                  fontWeight: FontWeight.w600,
                                                 ),
                                               ),
                                               const SizedBox(height: 2),
                                               Text(
-                                                c.message,
+                                                commit.message.isEmpty
+                                                    ? '(no message)'
+                                                    : commit.message,
                                                 style: TextStyle(
                                                   fontSize: 13,
                                                   color: isDark
@@ -212,7 +283,7 @@ class _ResetModalState extends State<ResetModal> {
                                               ),
                                               const SizedBox(height: 2),
                                               Text(
-                                                _formatDate(c.date),
+                                                _formatDate(commit.date),
                                                 style: TextStyle(
                                                     fontSize: 11,
                                                     color: Colors.grey[500]),
@@ -220,19 +291,11 @@ class _ResetModalState extends State<ResetModal> {
                                             ],
                                           ),
                                         ),
-                                        if (isSelected)
-                                          Icon(
-                                            Icons.check,
-                                            size: 18,
-                                            color: Theme.of(context)
-                                                .colorScheme
-                                                .primary,
-                                          ),
                                       ],
                                     ),
                                   ),
                                 );
-                              }).toList(),
+                              },
                             ),
                     ),
                     const SizedBox(height: 12),

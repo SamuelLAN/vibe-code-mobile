@@ -29,6 +29,14 @@ class AuthService extends ChangeNotifier {
   String? get error => _error;
   String? get accessToken => _tokenManager.accessToken;
 
+  void _syncAuthStateFromTokenManager() {
+    final nextAuthenticated = _tokenManager.hasValidToken;
+    if (_isAuthenticated == nextAuthenticated) return;
+
+    _isAuthenticated = nextAuthenticated;
+    notifyListeners();
+  }
+
   Future<void> _initialize() async {
     if (_isInitialized) return;
 
@@ -37,6 +45,7 @@ class AuthService extends ChangeNotifier {
       store: _store,
     );
     await _tokenManager.initialize();
+    _tokenManager.addListener(_syncAuthStateFromTokenManager);
 
     _isAuthenticated = _tokenManager.hasValidToken;
     _isInitialized = true;
@@ -148,7 +157,10 @@ class AuthService extends ChangeNotifier {
 
   @override
   void dispose() {
-    _tokenManager.dispose();
+    if (_isInitialized) {
+      _tokenManager.removeListener(_syncAuthStateFromTokenManager);
+      _tokenManager.dispose();
+    }
     _apiClient.dispose();
     super.dispose();
   }
