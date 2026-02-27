@@ -712,9 +712,28 @@ class _GitDrawerState extends State<GitDrawer> {
                               color: _statusColor(f.statusCode),
                             ),
                           ),
-                          const SizedBox(width: 6),
-                          Icon(Icons.more_horiz_rounded,
-                              size: 16, color: Colors.grey[500]),
+                          const SizedBox(width: 8),
+                          TextButton(
+                            onPressed: _worktreeActionLoading
+                                ? null
+                                : () => _discardSingleFile(context, f),
+                            style: TextButton.styleFrom(
+                              visualDensity: VisualDensity.compact,
+                              foregroundColor: GitColors.error,
+                              minimumSize: const Size(0, 28),
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 8,
+                                vertical: 4,
+                              ),
+                            ),
+                            child: const Text(
+                              'Discard',
+                              style: TextStyle(
+                                fontSize: 11,
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                          ),
                         ],
                       ),
                     ),

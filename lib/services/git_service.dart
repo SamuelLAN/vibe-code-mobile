@@ -321,12 +321,10 @@ class GitService extends ChangeNotifier {
     );
     if (!response.success) throw Exception(response.message);
     final payload = _payload(response.details);
-    if (payload is List) {
-      return payload.map((item) => item.toString()).toList();
-    }
+    if (payload is List) return _parseBranchNames(payload);
     if (payload is Map<String, dynamic>) {
       final items = _readList(payload, ['branches', 'items']);
-      return items.map((item) => item.toString()).toList();
+      return _parseBranchNames(items);
     }
     return <String>[];
   }
@@ -434,13 +432,15 @@ class GitService extends ChangeNotifier {
 
   Future<GitOperationResult> discardAllChanges({
     String? projectName,
+    bool includeUntracked = true,
   }) async {
     final effectiveProjectName = await _effectiveProjectName(projectName);
     return _post(
       '/vibe/git/worktree/discard',
       body: {
         'project_name': effectiveProjectName,
-        'discard_all': true,
+        'file_paths': <String>[],
+        'include_untracked': includeUntracked,
       },
     );
   }
@@ -448,13 +448,15 @@ class GitService extends ChangeNotifier {
   Future<GitOperationResult> discardFileChanges({
     required String filePath,
     String? projectName,
+    bool includeUntracked = true,
   }) async {
     final effectiveProjectName = await _effectiveProjectName(projectName);
     return _post(
       '/vibe/git/worktree/discard',
       body: {
         'project_name': effectiveProjectName,
-        'file_path': filePath,
+        'file_paths': [filePath],
+        'include_untracked': includeUntracked,
       },
     );
   }
@@ -462,11 +464,13 @@ class GitService extends ChangeNotifier {
   Future<GitFileDiff> getFileDiff({
     required String filePath,
     String? projectName,
+    bool staged = false,
+    int contextLines = 3,
   }) async {
     final effectiveProjectName = await _effectiveProjectName(projectName);
     final mock = await _settings.getGitMockMode();
     if (mock) {
-      _log('GET /vibe/git/worktree/diff -> mock mode enabled');
+      _log('POST /vibe/git/worktree/view-changes -> mock mode enabled');
       return GitFileDiff(
         path: filePath,
         beforeContent: '''
@@ -495,15 +499,17 @@ class Example {
       );
     }
 
-    final response = await _get(
-      '/vibe/git/worktree/diff',
-      query: {
+    final response = await _post(
+      '/vibe/git/worktree/view-changes',
+      body: {
         'project_name': effectiveProjectName,
-        'file_path': filePath,
+        'file_paths': [filePath],
+        'staged': staged,
+        'context_lines': contextLines,
       },
     );
     if (!response.success) throw Exception(response.message);
-    return _parseFileDiff(response.details, filePath: filePath);
+    return _parseViewChangesDiff(response.details, filePath: filePath);
   }
 
   Future<GitOperationResult> _get(
@@ -662,6 +668,27 @@ class Example {
         .toList();
   }
 
+  List<String> _parseBranchNames(List<dynamic> raw) {
+    final names = <String>[];
+    for (final item in raw) {
+      if (item is String) {
+        final value = item.trim();
+        if (value.isNotEmpty) names.add(value);
+        continue;
+      }
+      if (item is Map<String, dynamic>) {
+        final value = _readOptionalString(
+          item,
+          const ['name', 'branch', 'branch_name', 'ref', 'display_name'],
+        );
+        if (value != null && value.trim().isNotEmpty) {
+          names.add(value.trim());
+        }
+      }
+    }
+    return names.toSet().toList();
+  }
+
   GitFileDiff _parseFileDiff(String? raw, {required String filePath}) {
     final payload = _payload(raw);
     if (payload is String) {
@@ -699,6 +726,71 @@ class Example {
       );
     }
     return GitFileDiff(path: filePath);
+  }
+
+  GitFileDiff _parseViewChangesDiff(String? raw, {required String filePath}) {
+    final payload = _payload(raw);
+    if (payload is List) {
+      for (final item in payload.whereType<Map<String, dynamic>>()) {
+        final path = _readString(item, ['path', 'file_path'], fallback: '');
+        if (path == filePath) return _parseViewChangeItem(item, filePath);
+      }
+      Map<String, dynamic>? first;
+      for (final item in payload.whereType<Map<String, dynamic>>()) {
+        first = item;
+        break;
+      }
+      if (first != null) return _parseViewChangeItem(first, filePath);
+      return GitFileDiff(path: filePath);
+    }
+
+    if (payload is Map<String, dynamic>) {
+      final directPath = _readOptionalString(
+        payload,
+        const ['path', 'file_path'],
+      );
+      if (directPath != null || payload.containsKey('diff')) {
+        return _parseViewChangeItem(payload, filePath);
+      }
+
+      final items = _readList(payload, const ['changes', 'files', 'items']);
+      for (final item in items.whereType<Map<String, dynamic>>()) {
+        final path = _readString(item, ['path', 'file_path'], fallback: '');
+        if (path == filePath) return _parseViewChangeItem(item, filePath);
+      }
+      Map<String, dynamic>? first;
+      for (final item in items.whereType<Map<String, dynamic>>()) {
+        first = item;
+        break;
+      }
+      if (first != null) return _parseViewChangeItem(first, filePath);
+    }
+
+    // Backward compatibility: if backend still returns old /worktree/diff shape.
+    return _parseFileDiff(raw, filePath: filePath);
+  }
+
+  GitFileDiff _parseViewChangeItem(
+    Map<String, dynamic> item,
+    String fallbackPath,
+  ) {
+    final path =
+        _readString(item, const ['path', 'file_path'], fallback: fallbackPath);
+    final patch = _readOptionalString(item, const ['diff', 'patch']);
+    final before = _readOptionalString(
+      item,
+      const ['original_content', 'before_content', 'before', 'old_content'],
+    );
+    final after = _readOptionalString(
+      item,
+      const ['current_content', 'after_content', 'after', 'new_content'],
+    );
+    return GitFileDiff(
+      path: path,
+      beforeContent: before,
+      afterContent: after,
+      patch: patch,
+    );
   }
 
   dynamic _payload(String? raw) {
