@@ -194,15 +194,13 @@ class AuthApiClient {
   }
 
   Future<RefreshTokenResponse> refreshToken(RefreshTokenRequest request) async {
-    final uri = Uri.parse('$_baseUrl/auth/token/refresh');
+    final uri = Uri.parse('$_baseUrl/auth/token/refresh').replace(
+      queryParameters: {'refresh_token': request.refreshToken},
+    );
 
     debugPrint('Refresh token request to: $uri');
 
-    final response = await _client.post(
-      uri,
-      headers: {'Content-Type': 'application/json'},
-      body: jsonEncode(request.toJson()),
-    );
+    final response = await _client.post(uri);
 
     debugPrint('Refresh token response status: ${response.statusCode}');
     debugPrint('Refresh token response body: ${response.body}');

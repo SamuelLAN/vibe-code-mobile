@@ -56,6 +56,7 @@ class TokenManager extends ChangeNotifier {
   bool _isRefreshing = false;
   Timer? _refreshTimer;
   bool _isInitialized = false;
+  static const _refreshRetryDelay = Duration(seconds: 30);
 
   TokenInfo? get tokenInfo => _tokenInfo;
   bool get isInitialized => _isInitialized;
@@ -200,13 +201,25 @@ class TokenManager extends ChangeNotifier {
         refreshToken: response.refreshToken,
         expiresIn: response.expiresIn,
       );
-    } catch (e) {
-      // 刷新失败，清除 token
+    } on ApiException catch (e) {
       debugPrint('Token refresh failed: $e');
-      await clearTokens();
+      if (e.isUnauthorized || e.isForbidden) {
+        await clearTokens();
+      } else {
+        _scheduleRetryRefresh();
+      }
+    } catch (e) {
+      debugPrint('Token refresh failed: $e');
+      _scheduleRetryRefresh();
     } finally {
       _isRefreshing = false;
     }
+  }
+
+  void _scheduleRetryRefresh() {
+    _cancelRefreshTimer();
+    if (_tokenInfo == null) return;
+    _refreshTimer = Timer(_refreshRetryDelay, _doRefresh);
   }
 
   /// 强制刷新 token

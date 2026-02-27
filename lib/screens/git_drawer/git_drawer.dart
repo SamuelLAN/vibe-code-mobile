@@ -17,8 +17,7 @@ class GitDrawer extends StatefulWidget {
   State<GitDrawer> createState() => _GitDrawerState();
 }
 
-class _GitDrawerState extends State<GitDrawer>
-    with SingleTickerProviderStateMixin {
+class _GitDrawerState extends State<GitDrawer> {
   GitOpStatus _pullStatus = GitOpStatus.idle;
   GitOpStatus _pushStatus = GitOpStatus.idle;
   GitOpStatus _commitStatus = GitOpStatus.idle;
@@ -42,35 +41,13 @@ class _GitDrawerState extends State<GitDrawer>
   String? _toastMessage;
   Color? _toastColor;
   bool _showingToast = false;
-  late final AnimationController _runningIconController;
 
   GitService get _git => context.read<GitService>();
 
   @override
   void initState() {
     super.initState();
-    _runningIconController = AnimationController(
-      vsync: this,
-      duration: const Duration(milliseconds: 1100),
-    );
     unawaited(_refreshSliderData(initial: true));
-  }
-
-  @override
-  void dispose() {
-    _runningIconController.dispose();
-    super.dispose();
-  }
-
-  void _syncRunningIconAnimation(bool running) {
-    if (running) {
-      if (!_runningIconController.isAnimating) {
-        _runningIconController.repeat();
-      }
-      return;
-    }
-    _runningIconController.stop();
-    _runningIconController.value = 0;
   }
 
   Future<void> _refreshSliderData({bool initial = false}) async {
@@ -89,7 +66,6 @@ class _GitDrawerState extends State<GitDrawer>
         _worktree = results[2] as GitWorktreeStatus;
         _pushPreview = results[3] as GitPushSummary;
         final running = _runStatus.runningTaskCount > 0;
-        _syncRunningIconAnimation(running);
         if (running) {
           _npmStartStatus = ProjectOpStatus.running;
         } else if (_npmStartStatus == ProjectOpStatus.running) {
@@ -428,13 +404,10 @@ class _GitDrawerState extends State<GitDrawer>
               borderRadius: BorderRadius.circular(10),
             ),
             child: isRunning
-                ? RotationTransition(
-                    turns: _runningIconController,
-                    child: const Icon(
-                      Icons.sync_rounded,
-                      size: 14,
-                      color: GitColors.success,
-                    ),
+                ? const Icon(
+                    Icons.play_circle_fill_rounded,
+                    size: 14,
+                    color: GitColors.success,
                   )
                 : Icon(
                     Icons.stop_circle,
