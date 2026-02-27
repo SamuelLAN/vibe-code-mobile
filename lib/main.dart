@@ -24,12 +24,16 @@ class VibeCodingApp extends StatelessWidget {
         Provider(create: (_) => SettingsService()),
         ChangeNotifierProvider(create: (_) => AuthService()),
         ChangeNotifierProxyProvider<AuthService, ChatService>(
-          create: (context) => ChatService(authService: context.read<AuthService>()),
-          update: (context, auth, previous) => previous ?? ChatService(authService: auth),
+          create: (context) =>
+              ChatService(authService: context.read<AuthService>()),
+          update: (context, auth, previous) =>
+              previous ?? ChatService(authService: auth),
         ),
         ChangeNotifierProxyProvider<SettingsService, GitService>(
-          create: (context) => GitService(settings: context.read<SettingsService>()),
-          update: (context, settings, previous) => previous ?? GitService(settings: settings),
+          create: (context) =>
+              GitService(settings: context.read<SettingsService>()),
+          update: (context, settings, previous) =>
+              previous ?? GitService(settings: settings),
         ),
       ],
       child: MaterialApp(
@@ -83,6 +87,7 @@ class AuthGate extends StatefulWidget {
 class _AuthGateState extends State<AuthGate> {
   bool _authReady = false;
   bool _chatReady = false;
+  String _bootstrapStep = '准备启动...';
 
   @override
   void initState() {
@@ -91,22 +96,46 @@ class _AuthGateState extends State<AuthGate> {
   }
 
   Future<void> _bootstrap() async {
-    // 并行初始化认证和聊天服务
+    _logStep('应用启动，准备初始化服务');
     final auth = context.read<AuthService>();
     final chatService = context.read<ChatService>();
 
-    // 同时启动两个初始化任务
-    await Future.wait([
-      auth.tryAutoLogin(),
-      chatService.initialize(),
-    ]);
+    try {
+      _setBootstrapStep('正在初始化认证服务...');
+      _logStep('开始初始化认证服务');
+      await auth.tryAutoLogin();
+      _logStep('认证服务初始化完成');
 
+      _setBootstrapStep('正在初始化聊天服务...');
+      _logStep('开始初始化聊天服务');
+      await chatService.initialize();
+      _logStep('聊天服务初始化完成');
+
+      _setBootstrapStep('初始化完成');
+      _logStep('应用初始化完成');
+    } catch (e, st) {
+      _setBootstrapStep('初始化失败，请稍后重试');
+      _logStep('初始化异常: $e');
+      debugPrint('[AuthGate] bootstrap stacktrace:\n$st');
+    } finally {
+      if (!mounted) return;
+      setState(() {
+        _authReady = true;
+        _chatReady = true;
+      });
+    }
+  }
+
+  void _setBootstrapStep(String step) {
     if (!mounted) return;
-
     setState(() {
-      _authReady = true;
-      _chatReady = true;
+      _bootstrapStep = step;
     });
+  }
+
+  void _logStep(String message) {
+    final now = DateTime.now().toIso8601String();
+    debugPrint('[AuthGate][$now] $message');
   }
 
   @override
@@ -126,7 +155,8 @@ class _AuthGateState extends State<AuthGate> {
                 width: 80,
                 height: 80,
                 decoration: BoxDecoration(
-                  color: Theme.of(context).colorScheme.primary.withOpacity(0.1),
+                  color:
+                      Theme.of(context).colorScheme.primary.withValues(alpha: 0.1),
                   borderRadius: BorderRadius.circular(20),
                 ),
                 child: Icon(
@@ -140,8 +170,8 @@ class _AuthGateState extends State<AuthGate> {
               Text(
                 'Vibe Coding',
                 style: Theme.of(context).textTheme.headlineSmall?.copyWith(
-                  fontWeight: FontWeight.bold,
-                ),
+                      fontWeight: FontWeight.bold,
+                    ),
               ),
               const SizedBox(height: 32),
               // 加载指示器
@@ -152,6 +182,13 @@ class _AuthGateState extends State<AuthGate> {
                   strokeWidth: 2,
                   color: Theme.of(context).colorScheme.primary,
                 ),
+              ),
+              const SizedBox(height: 12),
+              Text(
+                _bootstrapStep,
+                style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                      color: Colors.grey.shade500,
+                    ),
               ),
             ],
           ),

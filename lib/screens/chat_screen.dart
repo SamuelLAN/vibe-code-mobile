@@ -14,6 +14,7 @@ import '../services/audio_player_service.dart';
 import '../services/audio_recorder_service.dart';
 import '../services/auth_service.dart';
 import '../services/chat_service.dart';
+import '../services/permission_service.dart';
 import '../widgets/attachment_tray.dart';
 import '../widgets/input_bar.dart';
 import '../widgets/message_bubble.dart';
@@ -34,6 +35,7 @@ class _ChatScreenState extends State<ChatScreen> {
   final List<Attachment> _recentUploads = [];
   final AudioRecorderService _audioRecorder = AudioRecorderService();
   final AudioPlayerService _audioPlayer = AudioPlayerService();
+  final PermissionService _permissionService = PermissionService();
   InputMode _inputMode = InputMode.voice;
   bool _isFullscreenInput = false;
 
@@ -41,6 +43,9 @@ class _ChatScreenState extends State<ChatScreen> {
   void initState() {
     super.initState();
     _audioPlayer.init();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _warmupMicrophonePermission();
+    });
   }
 
   @override
@@ -50,6 +55,14 @@ class _ChatScreenState extends State<ChatScreen> {
     _audioRecorder.dispose();
     _audioPlayer.dispose();
     super.dispose();
+  }
+
+  Future<void> _warmupMicrophonePermission() async {
+    try {
+      await _permissionService.requestMicrophonePermission();
+    } catch (e) {
+      debugPrint('预请求麦克风权限失败: $e');
+    }
   }
 
   Future<void> _sendMessage() async {

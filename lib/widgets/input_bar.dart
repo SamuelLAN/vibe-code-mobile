@@ -60,6 +60,7 @@ class InputBar extends StatefulWidget {
 }
 
 class _InputBarState extends State<InputBar> {
+  static const Duration _minVoiceDuration = Duration(seconds: 2);
   bool _isRecording = false;
   bool _isCancelling = false;
   bool _isStartingRecording = false;
@@ -67,6 +68,7 @@ class _InputBarState extends State<InputBar> {
   bool _recorderStarted = false;
   double _dragY = 0;
   double? _voicePointerStartY;
+  DateTime? _recordingStartedAt;
   int _recordingAttemptId = 0;
   bool _isFocused = false;
   final FocusNode _focusNode = FocusNode();
@@ -374,6 +376,7 @@ class _InputBarState extends State<InputBar> {
       _isRecording = true;
       _isStartingRecording = true;
       _recorderStarted = false;
+      _recordingStartedAt = null;
       _isCancelling = false;
       _dragY = 0;
     });
@@ -418,6 +421,7 @@ class _InputBarState extends State<InputBar> {
             _isRecording = false;
             _isStartingRecording = false;
             _recorderStarted = false;
+            _recordingStartedAt = null;
             _isCancelling = false;
             _dragY = 0;
           });
@@ -444,6 +448,7 @@ class _InputBarState extends State<InputBar> {
             _isRecording = false;
             _isStartingRecording = false;
             _recorderStarted = false;
+            _recordingStartedAt = null;
             _isCancelling = false;
             _dragY = 0;
           });
@@ -457,6 +462,7 @@ class _InputBarState extends State<InputBar> {
     setState(() {
       _isStartingRecording = false;
       _recorderStarted = true;
+      _recordingStartedAt = DateTime.now();
     });
 
     // 用户在录音真正开始前已经松手，启动完成后立即结束/取消。
@@ -474,35 +480,52 @@ class _InputBarState extends State<InputBar> {
     }
 
     if (!_isCancelling) {
-      // 停止录音并获取文件路径
-      String? filePath;
-      if (widget._recorder != null && _recorderStarted) {
-        try {
-          filePath = await widget._recorder!.stopRecording();
-        } catch (e) {
-          debugPrint('停止录音失败: $e');
+      final isTooShort = _recorderStarted &&
+          _recordingStartedAt != null &&
+          DateTime.now().difference(_recordingStartedAt!) < _minVoiceDuration;
+      if (isTooShort) {
+        if (widget._recorder != null) {
+          await widget._recorder!.cancelRecording();
         }
-      }
-
-      if (filePath != null && widget.onRecordingComplete != null) {
-        // 回调录音文件路径
-        widget.onRecordingComplete!(filePath);
-      } else if (filePath == null) {
-        // 录音失败，提示用户去设置中开启权限
-        debugPrint('录音失败或文件路径为空');
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(
-              content: Text('请在手机设置中允许麦克风权限'),
-              duration: Duration(seconds: 3),
+              content: Text('录音太短取消了'),
+              duration: Duration(seconds: 2),
             ),
           );
         }
-      } else if (widget.onVoiceSend != null) {
-        // 兼容旧的回调
-        widget.onVoiceSend!();
       } else {
-        widget.onSend();
+        // 停止录音并获取文件路径
+        String? filePath;
+        if (widget._recorder != null && _recorderStarted) {
+          try {
+            filePath = await widget._recorder!.stopRecording();
+          } catch (e) {
+            debugPrint('停止录音失败: $e');
+          }
+        }
+
+        if (filePath != null && widget.onRecordingComplete != null) {
+          // 回调录音文件路径
+          widget.onRecordingComplete!(filePath);
+        } else if (filePath == null) {
+          // 录音失败，提示用户去设置中开启权限
+          debugPrint('录音失败或文件路径为空');
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(
+                content: Text('请在手机设置中允许麦克风权限'),
+                duration: Duration(seconds: 3),
+              ),
+            );
+          }
+        } else if (widget.onVoiceSend != null) {
+          // 兼容旧的回调
+          widget.onVoiceSend!();
+        } else {
+          widget.onSend();
+        }
       }
     } else {
       // 取消录音
@@ -515,6 +538,7 @@ class _InputBarState extends State<InputBar> {
       _isRecording = false;
       _isStartingRecording = false;
       _recorderStarted = false;
+      _recordingStartedAt = null;
       _isCancelling = false;
       _dragY = 0;
     });
