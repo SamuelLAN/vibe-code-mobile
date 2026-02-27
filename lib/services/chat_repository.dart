@@ -8,19 +8,23 @@ import '../config/api_config.dart';
 import '../models/chat.dart';
 import '../models/message.dart';
 import 'auth_service.dart';
+import 'settings_service.dart';
 
 class ChatRepository {
   ChatRepository({
     AuthService? authService,
+    SettingsService? settings,
     http.Client? client,
     String projectName = 'vibe-code-mobile',
   })  : _authService = authService,
+        _settings = settings,
         _client = client ?? http.Client(),
-        _projectName = projectName;
+        _defaultProjectName = projectName;
 
   final AuthService? _authService;
+  final SettingsService? _settings;
   final http.Client _client;
-  final String _projectName;
+  final String _defaultProjectName;
 
   final Map<String, Chat> _chatCache = {};
   final Map<String, String> _serverTitleCache = {};
@@ -38,9 +42,10 @@ class ChatRepository {
     }
 
     try {
+      final projectName = await _effectiveProjectName();
       final uri = Uri.parse('${ApiConfig.codeBaseUrl}/vibe/coding/chat/list')
           .replace(queryParameters: {
-        'project_name': _projectName,
+        'project_name': projectName,
         'limit': '50',
       });
 
@@ -96,6 +101,7 @@ class ChatRepository {
     }
 
     try {
+      final projectName = await _effectiveProjectName();
       final uri = Uri.parse('${ApiConfig.codeBaseUrl}/vibe/coding/chat/create');
       final response = await _client.post(
         uri,
@@ -104,7 +110,7 @@ class ChatRepository {
           'Content-Type': 'application/json',
         },
         body: jsonEncode({
-          'project_name': _projectName,
+          'project_name': projectName,
           'chat_title': chat.title,
         }),
       );
@@ -364,5 +370,13 @@ class ChatRepository {
     if (response.statusCode != 200) {
       throw ApiException.fromResponse(response);
     }
+  }
+
+  Future<String> _effectiveProjectName() async {
+    final selected = await _settings?.getSelectedProjectName();
+    if (selected != null && selected.trim().isNotEmpty) {
+      return selected.trim();
+    }
+    return _defaultProjectName;
   }
 }

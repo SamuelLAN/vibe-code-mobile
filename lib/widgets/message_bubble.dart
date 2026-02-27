@@ -103,8 +103,10 @@ class MessageBubble extends StatelessWidget {
               ),
             if (message.attachments.isNotEmpty) const SizedBox(height: 8),
             if (isUser)
-              Text(message.content,
-                  style: Theme.of(context).textTheme.bodyMedium)
+              _CollapsibleUserText(
+                text: message.content,
+                style: Theme.of(context).textTheme.bodyMedium,
+              )
             else
               _AssistantMessageContent(
                 message: message,
@@ -132,6 +134,70 @@ class MessageBubble extends StatelessWidget {
           ],
         ),
       ),
+    );
+  }
+}
+
+class _CollapsibleUserText extends StatefulWidget {
+  const _CollapsibleUserText({
+    required this.text,
+    required this.style,
+  });
+
+  final String text;
+  final TextStyle? style;
+
+  @override
+  State<_CollapsibleUserText> createState() => _CollapsibleUserTextState();
+}
+
+class _CollapsibleUserTextState extends State<_CollapsibleUserText> {
+  static const int _collapsedMaxLines = 3;
+  bool _expanded = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final text = widget.text.trimRight();
+    if (text.isEmpty) return const SizedBox.shrink();
+
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final maxWidth = constraints.maxWidth.isFinite
+            ? constraints.maxWidth
+            : MediaQuery.of(context).size.width * 0.82;
+        final painter = TextPainter(
+          text: TextSpan(text: text, style: widget.style),
+          textDirection: Directionality.of(context),
+          maxLines: _collapsedMaxLines,
+        )..layout(maxWidth: maxWidth);
+        final canExpand = painter.didExceedMaxLines;
+
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              text,
+              style: widget.style,
+              maxLines: _expanded ? null : _collapsedMaxLines,
+              overflow:
+                  _expanded ? TextOverflow.visible : TextOverflow.ellipsis,
+            ),
+            if (canExpand) ...[
+              const SizedBox(height: 4),
+              GestureDetector(
+                onTap: () => setState(() => _expanded = !_expanded),
+                child: Text(
+                  _expanded ? '收起' : '展开',
+                  style: Theme.of(context).textTheme.labelMedium?.copyWith(
+                        color: Theme.of(context).colorScheme.primary,
+                        fontWeight: FontWeight.w600,
+                      ),
+                ),
+              ),
+            ],
+          ],
+        );
+      },
     );
   }
 }
@@ -288,6 +354,9 @@ class _FunctionTimelineBlock extends StatefulWidget {
 class _FunctionTimelineBlockState extends State<_FunctionTimelineBlock> {
   static const double _collapsedCodeViewportHeight = 140;
   static const double _expandedCodeViewportHeight = 320;
+
+  /// åºå®çåå®¹åºåé«åº¦å¸¸éï¼ç¡®ä¿ææ frame åå§æ¾ç¤ºæ¶å¤§å°åºå®
+  static const double _fixedContentViewportHeight = 280;
   bool _expanded = false;
 
   @override
@@ -1937,9 +2006,13 @@ class _CodingMindMapTreeCard extends StatelessWidget {
   final List<_CodingMindMapNodeItem> roots;
   final bool isDark;
 
+  /// åºå®é«åº¦å¸¸é
+  static const double fixedHeight = 280;
+
   @override
   Widget build(BuildContext context) {
     return Container(
+      height: fixedHeight,
       decoration: BoxDecoration(
         color: isDark
             ? Colors.white.withValues(alpha: 0.035)
@@ -1956,25 +2029,30 @@ class _CodingMindMapTreeCard extends StatelessWidget {
           ),
         ],
       ),
-      padding: const EdgeInsets.fromLTRB(12, 10, 12, 10),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          for (var i = 0; i < roots.length; i++) ...[
-            _CodingMindMapNodeTile(
-              node: roots[i],
-              isDark: isDark,
-              depth: 0,
-              accentIndex: i,
-              defaultOpen: true,
-            ),
-            if (i != roots.length - 1)
-              Divider(
-                height: 8,
-                color: Colors.white.withValues(alpha: isDark ? 0.05 : 0.1),
-              ),
-          ],
-        ],
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(14),
+        child: SingleChildScrollView(
+          padding: const EdgeInsets.fromLTRB(10, 8, 10, 8),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              for (var i = 0; i < roots.length; i++) ...[
+                _CodingMindMapNodeTile(
+                  node: roots[i],
+                  isDark: isDark,
+                  depth: 0,
+                  accentIndex: i,
+                  defaultOpen: true,
+                ),
+                if (i != roots.length - 1)
+                  Divider(
+                    height: 6,
+                    color: Colors.white.withValues(alpha: isDark ? 0.05 : 0.1),
+                  ),
+              ],
+            ],
+          ),
+        ),
       ),
     );
   }
@@ -2011,8 +2089,8 @@ class _CodingMindMapNodeTileState extends State<_CodingMindMapNodeTile> {
     Color(0xFF3B82F6),
   ];
 
-  static const double _lineW = 1.4;
-  static const double _connectorW = 22;
+  static const double _lineW = 1.2;
+  static const double _connectorW = 18;
 
   @override
   Widget build(BuildContext context) {
@@ -2022,7 +2100,7 @@ class _CodingMindMapNodeTileState extends State<_CodingMindMapNodeTile> {
         : _accents[widget.accentIndex % _accents.length];
     final titleColor = widget.isDark ? Colors.grey[200] : Colors.blueGrey[800];
     final subColor = widget.isDark ? Colors.grey[400] : Colors.blueGrey[600];
-    final titleSize = widget.depth == 0 ? 13.0 : 12.0;
+    final titleSize = widget.depth == 0 ? 11.0 : 10.0;
     final titleWeight = widget.depth == 0 ? FontWeight.w800 : FontWeight.w700;
     final connectorColor =
         Colors.white.withValues(alpha: widget.isDark ? 0.28 : 0.24);
@@ -2036,17 +2114,17 @@ class _CodingMindMapNodeTileState extends State<_CodingMindMapNodeTile> {
           child: Padding(
             padding: EdgeInsets.only(
               left: widget.depth == 0 ? 0 : 2,
-              top: widget.depth == 0 ? 6 : 4,
-              bottom: widget.depth == 0 ? 6 : 4,
+              top: widget.depth == 0 ? 4 : 2,
+              bottom: widget.depth == 0 ? 4 : 2,
               right: 2,
             ),
             child: Row(
               crossAxisAlignment: CrossAxisAlignment.center,
               children: [
                 Container(
-                  width: widget.depth == 0 ? 2.8 : 2.4,
-                  height: widget.depth == 0 ? 30 : 24,
-                  margin: const EdgeInsets.only(right: 10),
+                  width: widget.depth == 0 ? 2.4 : 2.0,
+                  height: widget.depth == 0 ? 24 : 20,
+                  margin: const EdgeInsets.only(right: 8),
                   decoration: BoxDecoration(
                     color: accent.withValues(
                         alpha: widget.depth == 0 ? 0.95 : 0.86),
@@ -2067,10 +2145,10 @@ class _CodingMindMapNodeTileState extends State<_CodingMindMapNodeTile> {
                   ),
                 ),
                 if (hasChildren) ...[
-                  const SizedBox(width: 8),
+                  const SizedBox(width: 6),
                   Container(
-                    width: 22,
-                    height: 22,
+                    width: 18,
+                    height: 18,
                     decoration: BoxDecoration(
                       color: Colors.white
                           .withValues(alpha: widget.isDark ? 0.1 : 0.2),
@@ -2078,7 +2156,7 @@ class _CodingMindMapNodeTileState extends State<_CodingMindMapNodeTile> {
                     ),
                     child: Icon(
                       _open ? Icons.expand_more : Icons.chevron_right,
-                      size: 14,
+                      size: 12,
                       color: subColor,
                     ),
                   ),
@@ -3895,8 +3973,13 @@ class _AttachmentRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final onlyVoice = attachments.every((a) => a.type == AttachmentType.voice);
+    final bubbleMaxWidth = MediaQuery.of(context).size.width * 0.82;
+    final voiceWidth = (bubbleMaxWidth - 24).clamp(220.0, 340.0).toDouble();
+    final voiceHeight = 42.0;
+
     return SizedBox(
-      height: 72,
+      height: onlyVoice ? voiceHeight : 72,
       child: ListView.separated(
         scrollDirection: Axis.horizontal,
         itemCount: attachments.length,
@@ -3907,6 +3990,8 @@ class _AttachmentRow extends StatelessWidget {
             return _VoiceMessageWidget(
               attachment: attachment,
               audioPlayer: audioPlayer,
+              width: voiceWidth,
+              height: voiceHeight,
             );
           }
           return GestureDetector(
@@ -3958,10 +4043,17 @@ class _AttachmentRow extends StatelessWidget {
 
 /// 语音消息组件，显示转录状态和播放按钮
 class _VoiceMessageWidget extends StatefulWidget {
-  const _VoiceMessageWidget({required this.attachment, this.audioPlayer});
+  const _VoiceMessageWidget({
+    required this.attachment,
+    this.audioPlayer,
+    required this.width,
+    required this.height,
+  });
 
   final Attachment attachment;
   final AudioPlayerService? audioPlayer;
+  final double width;
+  final double height;
 
   @override
   State<_VoiceMessageWidget> createState() => _VoiceMessageWidgetState();
@@ -4002,17 +4094,17 @@ class _VoiceMessageWidgetState extends State<_VoiceMessageWidget> {
           ? () => audioPlayer.play(widget.attachment.path)
           : null,
       child: Container(
-        width: 180,
-        height: 48,
+        width: widget.width,
+        height: widget.height,
         decoration: BoxDecoration(
           color: _getBackgroundColor(context, isPlaying),
-          borderRadius: BorderRadius.circular(24),
+          borderRadius: BorderRadius.circular(widget.height / 2),
         ),
         child: Row(
           children: [
-            const SizedBox(width: 8),
+            const SizedBox(width: 6),
             _buildPlayButton(context, isPlaying, audioPlayer != null),
-            const SizedBox(width: 8),
+            const SizedBox(width: 6),
             Expanded(
               child: _buildContent(context, isPlaying),
             ),
@@ -4034,8 +4126,8 @@ class _VoiceMessageWidgetState extends State<_VoiceMessageWidget> {
     }
 
     return Container(
-      width: 32,
-      height: 32,
+      width: 26,
+      height: 26,
       decoration: BoxDecoration(
         color: Theme.of(context).colorScheme.primary,
         shape: BoxShape.circle,
@@ -4043,7 +4135,7 @@ class _VoiceMessageWidgetState extends State<_VoiceMessageWidget> {
       child: Icon(
         isPlaying ? Icons.pause : Icons.play_arrow,
         color: Colors.white,
-        size: 20,
+        size: 16,
       ),
     );
   }

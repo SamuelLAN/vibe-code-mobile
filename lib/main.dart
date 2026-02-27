@@ -24,10 +24,16 @@ class VibeCodingApp extends StatelessWidget {
         Provider(create: (_) => SettingsService()),
         ChangeNotifierProvider(create: (_) => AuthService()),
         ChangeNotifierProxyProvider<AuthService, ChatService>(
-          create: (context) =>
-              ChatService(authService: context.read<AuthService>()),
+          create: (context) => ChatService(
+            authService: context.read<AuthService>(),
+            settings: context.read<SettingsService>(),
+          ),
           update: (context, auth, previous) =>
-              previous ?? ChatService(authService: auth),
+              previous ??
+              ChatService(
+                authService: auth,
+                settings: context.read<SettingsService>(),
+              ),
         ),
         ChangeNotifierProxyProvider<SettingsService, GitService>(
           create: (context) =>
@@ -155,8 +161,10 @@ class _AuthGateState extends State<AuthGate> {
                 width: 80,
                 height: 80,
                 decoration: BoxDecoration(
-                  color:
-                      Theme.of(context).colorScheme.primary.withValues(alpha: 0.1),
+                  color: Theme.of(context)
+                      .colorScheme
+                      .primary
+                      .withValues(alpha: 0.1),
                   borderRadius: BorderRadius.circular(20),
                 ),
                 child: Icon(

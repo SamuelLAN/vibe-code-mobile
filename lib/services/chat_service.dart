@@ -12,24 +12,30 @@ import '../models/message.dart';
 import '../models/stream_element.dart';
 import 'auth_service.dart';
 import 'chat_repository.dart';
+import 'settings_service.dart';
 import 'stream_buffer_processor.dart';
 
 class ChatService extends ChangeNotifier {
   ChatService({
     ChatRepository? repository,
     AuthService? authService,
+    SettingsService? settings,
     TranscribeApiClient? transcribeClient,
     CodingStreamApiClient? codingStreamClient,
-  })  : _repo = repository ?? ChatRepository(authService: authService),
+  })  : _settings = settings,
+        _repo = repository ??
+            ChatRepository(authService: authService, settings: settings),
         _authService = authService,
         _transcribeClient = transcribeClient ?? TranscribeApiClient(),
         _codingStreamClient = codingStreamClient ?? CodingStreamApiClient();
 
   final ChatRepository _repo;
   final AuthService? _authService;
+  final SettingsService? _settings;
   final TranscribeApiClient _transcribeClient;
   final CodingStreamApiClient _codingStreamClient;
   final Uuid _uuid = const Uuid();
+  static const String _defaultProjectName = 'vibe-code-mobile';
 
   List<Chat> _chats = [];
   Chat? _activeChat;
@@ -431,6 +437,7 @@ class ChatService extends ChangeNotifier {
       );
       return;
     }
+    final projectName = await _effectiveProjectName();
 
     await _codingStreamClient.startStream(
       accessToken: accessToken,
@@ -438,7 +445,7 @@ class ChatService extends ChangeNotifier {
       mode: 'flash',
       chatId: _activeChat!.id,
       memoryId: _activeChat!.id,
-      projectName: 'vibe-code-mobile',
+      projectName: projectName,
       onEvent: (event) {
         if (_activeGenerationId != generationId) {
           return;
@@ -577,6 +584,14 @@ class ChatService extends ChangeNotifier {
     for (final element in newElements) {
       _mergeStreamElement(message.streamElements, element);
     }
+  }
+
+  Future<String> _effectiveProjectName() async {
+    final selected = await _settings?.getSelectedProjectName();
+    if (selected != null && selected.trim().isNotEmpty) {
+      return selected.trim();
+    }
+    return _defaultProjectName;
   }
 
   void _mergeStreamElement(List<StreamElement> target, StreamElement incoming) {
