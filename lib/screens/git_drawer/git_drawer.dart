@@ -17,7 +17,8 @@ class GitDrawer extends StatefulWidget {
   State<GitDrawer> createState() => _GitDrawerState();
 }
 
-class _GitDrawerState extends State<GitDrawer> {
+class _GitDrawerState extends State<GitDrawer>
+    with SingleTickerProviderStateMixin {
   GitOpStatus _pullStatus = GitOpStatus.idle;
   GitOpStatus _pushStatus = GitOpStatus.idle;
   GitOpStatus _commitStatus = GitOpStatus.idle;
@@ -41,13 +42,35 @@ class _GitDrawerState extends State<GitDrawer> {
   String? _toastMessage;
   Color? _toastColor;
   bool _showingToast = false;
+  late final AnimationController _runningIconController;
 
   GitService get _git => context.read<GitService>();
 
   @override
   void initState() {
     super.initState();
+    _runningIconController = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 1100),
+    );
     unawaited(_refreshSliderData(initial: true));
+  }
+
+  @override
+  void dispose() {
+    _runningIconController.dispose();
+    super.dispose();
+  }
+
+  void _syncRunningIconAnimation(bool running) {
+    if (running) {
+      if (!_runningIconController.isAnimating) {
+        _runningIconController.repeat();
+      }
+      return;
+    }
+    _runningIconController.stop();
+    _runningIconController.value = 0;
   }
 
   Future<void> _refreshSliderData({bool initial = false}) async {
@@ -65,7 +88,9 @@ class _GitDrawerState extends State<GitDrawer> {
         _runStatus = results[1] as GitRunStatus;
         _worktree = results[2] as GitWorktreeStatus;
         _pushPreview = results[3] as GitPushSummary;
-        if (_runStatus.runningTaskCount > 0) {
+        final running = _runStatus.runningTaskCount > 0;
+        _syncRunningIconAnimation(running);
+        if (running) {
           _npmStartStatus = ProjectOpStatus.running;
         } else if (_npmStartStatus == ProjectOpStatus.running) {
           _npmStartStatus = ProjectOpStatus.stopped;
@@ -395,32 +420,27 @@ class _GitDrawerState extends State<GitDrawer> {
           ),
           const SizedBox(width: 8),
           Container(
-            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+            padding: const EdgeInsets.all(6),
             decoration: BoxDecoration(
               color: isRunning
                   ? GitColors.success.withOpacity(0.12)
                   : (isDark ? Colors.white10 : Colors.black.withOpacity(0.05)),
               borderRadius: BorderRadius.circular(10),
             ),
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Icon(
-                  isRunning ? Icons.play_circle_fill_rounded : Icons.stop_circle,
-                  size: 13,
-                  color: isRunning ? GitColors.success : Colors.grey[600],
-                ),
-                const SizedBox(width: 4),
-                Text(
-                  isRunning ? 'running' : 'stopped',
-                  style: TextStyle(
-                    color: isRunning ? GitColors.success : Colors.grey[600],
-                    fontSize: 12,
-                    fontWeight: FontWeight.w600,
+            child: isRunning
+                ? RotationTransition(
+                    turns: _runningIconController,
+                    child: const Icon(
+                      Icons.sync_rounded,
+                      size: 14,
+                      color: GitColors.success,
+                    ),
+                  )
+                : Icon(
+                    Icons.stop_circle,
+                    size: 14,
+                    color: Colors.grey[600],
                   ),
-                ),
-              ],
-            ),
           ),
           const SizedBox(width: 8),
           Container(
