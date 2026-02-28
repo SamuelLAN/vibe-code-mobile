@@ -44,6 +44,8 @@ class CodingStreamApiClient {
     required String accessToken,
     required String msg,
     required String mode,
+    List<Map<String, dynamic>>? content,
+    List<Map<String, dynamic>>? msgBlocks,
     String? flowId,
     String? chatId,
     String? memoryId,
@@ -56,6 +58,10 @@ class CodingStreamApiClient {
       'msg': msg,
       'mode': mode,
     };
+    final effectiveBlocks = content ?? msgBlocks;
+    if (effectiveBlocks != null && effectiveBlocks.isNotEmpty) {
+      body['content'] = effectiveBlocks;
+    }
     if (flowId != null && flowId.isNotEmpty) {
       body['flow_id'] = flowId;
     }

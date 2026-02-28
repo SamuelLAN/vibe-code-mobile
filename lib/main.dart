@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
@@ -35,11 +37,17 @@ class VibeCodingApp extends StatelessWidget {
                 settings: context.read<SettingsService>(),
               ),
         ),
-        ChangeNotifierProxyProvider<SettingsService, GitService>(
-          create: (context) =>
-              GitService(settings: context.read<SettingsService>()),
-          update: (context, settings, previous) =>
-              previous ?? GitService(settings: settings),
+        ChangeNotifierProxyProvider2<SettingsService, AuthService, GitService>(
+          create: (context) => GitService(
+            settings: context.read<SettingsService>(),
+            authService: context.read<AuthService>(),
+          ),
+          update: (context, settings, auth, previous) =>
+              previous ??
+              GitService(
+                settings: settings,
+                authService: auth,
+              ),
         ),
       ],
       child: MaterialApp(
@@ -90,7 +98,7 @@ class AuthGate extends StatefulWidget {
   State<AuthGate> createState() => _AuthGateState();
 }
 
-class _AuthGateState extends State<AuthGate> {
+class _AuthGateState extends State<AuthGate> with WidgetsBindingObserver {
   bool _authReady = false;
   bool _chatReady = false;
   String _bootstrapStep = '准备启动...';
@@ -98,7 +106,26 @@ class _AuthGateState extends State<AuthGate> {
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     _bootstrap();
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) {
+      unawaited(_refreshTokenOnResume());
+    }
+  }
+
+  Future<void> _refreshTokenOnResume() async {
+    final auth = context.read<AuthService>();
+    await auth.getValidToken();
   }
 
   Future<void> _bootstrap() async {

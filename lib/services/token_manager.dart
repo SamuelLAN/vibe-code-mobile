@@ -54,6 +54,7 @@ class TokenManager extends ChangeNotifier {
 
   TokenInfo? _tokenInfo;
   bool _isRefreshing = false;
+  Completer<void>? _refreshCompleter;
   Timer? _refreshTimer;
   bool _isInitialized = false;
   static const _refreshRetryDelay = Duration(seconds: 30);
@@ -185,11 +186,17 @@ class TokenManager extends ChangeNotifier {
 
   /// 执行 token 刷新
   Future<void> _doRefresh() async {
-    if (_isRefreshing || _tokenInfo == null) return;
+    if (_tokenInfo == null) return;
+    if (_isRefreshing) {
+      await _refreshCompleter?.future;
+      return;
+    }
 
-    debugPrint('Attempting token refresh with refresh_token: ${_tokenInfo!.refreshToken}');
+    debugPrint(
+        'Attempting token refresh with refresh_token: ${_tokenInfo!.refreshToken}');
 
     _isRefreshing = true;
+    _refreshCompleter = Completer<void>();
 
     try {
       final response = await _apiClient.refreshToken(
@@ -213,6 +220,8 @@ class TokenManager extends ChangeNotifier {
       _scheduleRetryRefresh();
     } finally {
       _isRefreshing = false;
+      _refreshCompleter?.complete();
+      _refreshCompleter = null;
     }
   }
 
@@ -235,7 +244,7 @@ class TokenManager extends ChangeNotifier {
   Future<String?> ensureValidToken() async {
     if (_tokenInfo == null) return null;
 
-    if (_tokenInfo!.needsRefresh && !_isRefreshing) {
+    if (_tokenInfo!.isExpired || _tokenInfo!.needsRefresh || _isRefreshing) {
       await _doRefresh();
     }
 

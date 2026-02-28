@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:convert';
 import 'dart:io';
 
 import 'package:flutter/foundation.dart';
@@ -46,6 +47,8 @@ class ChatService extends ChangeNotifier {
   String? _currentFlowId;
   String? _activeGenerationId;
   final Map<String, StreamBufferProcessor> _streamProcessors = {};
+
+  static const int _chatNotFoundErrorCode = 3001;
 
   List<Chat> get chats => _chats;
   Chat? get activeChat => _activeChat;
@@ -136,6 +139,7 @@ class ChatService extends ChangeNotifier {
       String text, List<Attachment> attachments) async {
     if (_activeChat == null) return;
     _error = null;
+    await _ensureActiveChatReady();
 
     final userMessage = Message(
       id: _uuid.v4(),
@@ -148,16 +152,24 @@ class ChatService extends ChangeNotifier {
     await _repo.addMessage(userMessage);
     _messages.add(userMessage);
 
-    await _updateChatMeta(text);
+    await _updateChatMeta(_buildPreviewText(text, attachments));
     notifyListeners();
 
-    await _generateAssistantResponse(text);
+    final result =
+        await _generateAssistantResponse(text, attachments: attachments);
+    if (result == _GenerationResult.chatMissing) {
+      final recreated = await _recoverMissingChat();
+      if (recreated) {
+        await _generateAssistantResponse(text, attachments: attachments);
+      }
+    }
   }
 
   /// 发送语音消息并进行转写
   Future<void> sendVoiceMessage(File audioFile) async {
     if (_activeChat == null) return;
     _error = null;
+    await _ensureActiveChatReady();
 
     debugPrint('[ChatService] 开始处理语音消息, 文件: ${audioFile.path}');
 
@@ -286,7 +298,13 @@ class ChatService extends ChangeNotifier {
       // 转写完成后，调用 AI 回复接口
       final finalText = transcribedText.toString();
       if (isTranscribeComplete && finalText.isNotEmpty) {
-        await _generateAssistantResponse(finalText);
+        final result = await _generateAssistantResponse(finalText);
+        if (result == _GenerationResult.chatMissing) {
+          final recreated = await _recoverMissingChat();
+          if (recreated) {
+            await _generateAssistantResponse(finalText);
+          }
+        }
       }
     } catch (e) {
       _updateAttachmentStatus(
@@ -353,8 +371,20 @@ class ChatService extends ChangeNotifier {
         attachments: [],
       ),
     );
-    if (lastUser.content.isEmpty) return;
-    await _generateAssistantResponse(lastUser.content);
+    if (lastUser.content.isEmpty && lastUser.attachments.isEmpty) return;
+    final result = await _generateAssistantResponse(
+      lastUser.content,
+      attachments: lastUser.attachments,
+    );
+    if (result == _GenerationResult.chatMissing) {
+      final recreated = await _recoverMissingChat();
+      if (recreated) {
+        await _generateAssistantResponse(
+          lastUser.content,
+          attachments: lastUser.attachments,
+        );
+      }
+    }
   }
 
   void stopGeneration() {
@@ -400,11 +430,15 @@ class ChatService extends ChangeNotifier {
     await refreshChats();
   }
 
-  Future<void> _generateAssistantResponse(String prompt) async {
-    if (_activeChat == null) return;
+  Future<_GenerationResult> _generateAssistantResponse(
+    String prompt, {
+    List<Attachment> attachments = const [],
+    bool hasRetriedAuth = false,
+  }) async {
+    if (_activeChat == null) return _GenerationResult.failed;
     if (_authService == null) {
       await _generateMockAssistantResponse();
-      return;
+      return _GenerationResult.success;
     }
 
     final assistantMessage = Message(
@@ -435,13 +469,18 @@ class ChatService extends ChangeNotifier {
         generationId: generationId,
         error: '认证失败，请重新登录',
       );
-      return;
+      return _GenerationResult.failed;
     }
     final projectName = await _effectiveProjectName();
+    final contentBlocks = await _buildContentBlocks(prompt, attachments);
+    final fallbackPrompt = prompt.trim().isNotEmpty ? prompt : '请结合附件内容回答';
 
+    bool chatMissingError = false;
+    bool authInvalidError = false;
     await _codingStreamClient.startStream(
       accessToken: accessToken,
-      msg: prompt,
+      msg: fallbackPrompt,
+      content: contentBlocks.isEmpty ? null : contentBlocks,
       mode: 'flash',
       chatId: _activeChat!.id,
       memoryId: _activeChat!.id,
@@ -472,6 +511,28 @@ class ChatService extends ChangeNotifier {
             );
             break;
           case CodingStreamEventType.error:
+            if (_isChatNotFoundError(event)) {
+              chatMissingError = true;
+              _discardAssistantMessage(assistantMessage);
+              _isGenerating = false;
+              _activeGenerationId = null;
+              _currentFlowId = null;
+              notifyListeners();
+              break;
+            }
+            if (_isAuthInvalidError(
+              event.error,
+              rawData: event.rawData,
+              extra: event.text,
+            )) {
+              authInvalidError = true;
+              _discardAssistantMessage(assistantMessage);
+              _isGenerating = false;
+              _activeGenerationId = null;
+              _currentFlowId = null;
+              notifyListeners();
+              break;
+            }
             _finishAssistantStream(
               assistantMessage: assistantMessage,
               generationId: generationId,
@@ -482,12 +543,33 @@ class ChatService extends ChangeNotifier {
       },
     );
 
+    if (chatMissingError) {
+      return _GenerationResult.chatMissing;
+    }
+
+    if (authInvalidError) {
+      if (!hasRetriedAuth) {
+        final refreshed = await _authService.forceRefreshToken();
+        if (refreshed) {
+          return _generateAssistantResponse(
+            prompt,
+            attachments: attachments,
+            hasRetriedAuth: true,
+          );
+        }
+      }
+      _error = '登录状态已过期，请重新登录';
+      notifyListeners();
+      return _GenerationResult.failed;
+    }
+
     if (_activeGenerationId == generationId) {
       _finishAssistantStream(
         assistantMessage: assistantMessage,
         generationId: generationId,
       );
     }
+    return _GenerationResult.success;
   }
 
   Future<void> _generateMockAssistantResponse() async {
@@ -594,6 +676,68 @@ class ChatService extends ChangeNotifier {
     return _defaultProjectName;
   }
 
+  String _buildPreviewText(String text, List<Attachment> attachments) {
+    final trimmed = text.trim();
+    if (trimmed.isNotEmpty) return trimmed;
+    if (attachments.isEmpty) return trimmed;
+
+    final imageCount =
+        attachments.where((a) => a.type == AttachmentType.image).length;
+    final fileCount =
+        attachments.where((a) => a.type != AttachmentType.image).length;
+    final parts = <String>[];
+    if (imageCount > 0) {
+      parts.add('$imageCount 张图片');
+    }
+    if (fileCount > 0) {
+      parts.add('$fileCount 个文件');
+    }
+    return '附件消息（${parts.join('，')}）';
+  }
+
+  Future<List<Map<String, dynamic>>> _buildContentBlocks(
+    String text,
+    List<Attachment> attachments,
+  ) async {
+    final blocks = <Map<String, dynamic>>[];
+    final trimmed = text.trim();
+    if (trimmed.isNotEmpty) {
+      blocks.add({'type': 'text', 'text': trimmed});
+    }
+
+    for (final attachment in attachments) {
+      final file = File(attachment.path);
+      if (!await file.exists()) {
+        debugPrint('[ChatService] 附件不存在，已跳过: ${attachment.path}');
+        continue;
+      }
+
+      final bytes = await file.readAsBytes();
+      final data = base64Encode(bytes);
+      if (attachment.type == AttachmentType.image) {
+        blocks.add({
+          'type': 'image',
+          'source': {
+            'type': 'base64',
+            'media_type': attachment.mime,
+            'data': data,
+          },
+        });
+        continue;
+      }
+
+      blocks.add({
+        'type': 'file',
+        'source_type': 'base64',
+        'name': attachment.name,
+        'media_type': attachment.mime,
+        'data': data,
+      });
+    }
+
+    return blocks;
+  }
+
   void _mergeStreamElement(List<StreamElement> target, StreamElement incoming) {
     if (target.isEmpty) {
       target.add(incoming);
@@ -624,6 +768,122 @@ class ChatService extends ChangeNotifier {
     target.add(incoming);
   }
 
+  Future<void> _ensureActiveChatReady() async {
+    if (_activeChat == null) return;
+    await _replaceActiveChat(await _repo.ensureChatExists(_activeChat!));
+  }
+
+  Future<bool> _recoverMissingChat() async {
+    if (_activeChat == null) return false;
+    final oldChat = _activeChat!;
+    final recreated = await _repo.createChat(
+      Chat(
+        id: _uuid.v4(),
+        title: oldChat.title.trim().isEmpty ? 'New Chat' : oldChat.title,
+        createdAt: oldChat.createdAt,
+        updatedAt: DateTime.now(),
+        lastMessagePreview: oldChat.lastMessagePreview,
+      ),
+    );
+
+    await _replaceActiveChat(recreated, oldChatId: oldChat.id);
+    return true;
+  }
+
+  Future<void> _replaceActiveChat(Chat chat, {String? oldChatId}) async {
+    final previousId = oldChatId ?? _activeChat?.id;
+    final previousMessages =
+        previousId == null ? _messages : await _repo.getMessages(previousId);
+
+    final index = _chats.indexWhere((c) => c.id == chat.id);
+    if (index == -1) {
+      _chats.insert(0, chat);
+    } else {
+      _chats[index] = chat;
+    }
+    if (previousId != null && previousId != chat.id) {
+      _chats.removeWhere((c) => c.id == previousId);
+    }
+
+    _activeChat = chat;
+
+    if (previousId != null && previousId != chat.id) {
+      if (previousMessages.isEmpty) {
+        _messages = await _repo.getMessages(chat.id);
+        notifyListeners();
+        return;
+      }
+      final migrated = <Message>[];
+      for (final msg in previousMessages) {
+        final copied = Message(
+          id: msg.id,
+          chatId: chat.id,
+          role: msg.role,
+          content: msg.content,
+          createdAt: msg.createdAt,
+          attachments: List<Attachment>.from(msg.attachments),
+          isStreaming: msg.isStreaming,
+          streamElements: List<StreamElement>.from(msg.streamElements),
+        );
+        await _repo.addMessage(copied);
+        migrated.add(copied);
+      }
+      _messages = migrated;
+    } else {
+      _messages = await _repo.getMessages(chat.id);
+    }
+    notifyListeners();
+  }
+
+  bool _isChatNotFoundError(CodingStreamEvent event) {
+    if ((event.error ?? '').contains('chat_id not found')) {
+      return true;
+    }
+    final raw = event.rawData;
+    if (raw == null || raw.isEmpty) {
+      return false;
+    }
+    try {
+      final decoded = jsonDecode(raw);
+      if (decoded is Map<String, dynamic>) {
+        final code = decoded['code'];
+        if (code is int && code == _chatNotFoundErrorCode) {
+          return true;
+        }
+        if (code is String && int.tryParse(code) == _chatNotFoundErrorCode) {
+          return true;
+        }
+        final msg = decoded['msg']?.toString() ?? '';
+        if (msg.contains('chat_id not found')) {
+          return true;
+        }
+      }
+    } catch (_) {
+      return raw.contains('chat_id not found');
+    }
+    return false;
+  }
+
+  bool _isAuthInvalidError(
+    String? message, {
+    String? rawData,
+    String? extra,
+  }) {
+    final text =
+        '${message ?? ''} ${extra ?? ''} ${rawData ?? ''}'.toLowerCase();
+    return text.contains('invalid token') ||
+        text.contains('unauthorized') ||
+        text.contains('token expired') ||
+        text.contains('jwt expired') ||
+        text.contains('401');
+  }
+
+  Future<void> _discardAssistantMessage(Message message) async {
+    _streamProcessors.remove(message.id);
+    _messages.removeWhere((m) => m.id == message.id);
+    await _repo.deleteMessage(message.chatId, message.id);
+  }
+
   @override
   void dispose() {
     _streamTimer?.cancel();
@@ -633,4 +893,10 @@ class ChatService extends ChangeNotifier {
     _transcribeClient.dispose();
     super.dispose();
   }
+}
+
+enum _GenerationResult {
+  success,
+  chatMissing,
+  failed,
 }

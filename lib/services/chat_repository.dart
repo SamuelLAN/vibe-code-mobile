@@ -123,6 +123,7 @@ class ChatRepository {
       final created = _chatFromApi(chatData, fallbackTitle: chat.title);
       _chatCache[created.id] = created;
       _serverTitleCache[created.id] = created.title;
+      _lastPreviewCache[created.id] = chat.lastMessagePreview;
       _messages.putIfAbsent(created.id, () => []);
       return created;
     } catch (e) {
@@ -236,6 +237,12 @@ class ChatRepository {
     return List.from(_messages[chatId] ?? []);
   }
 
+  Future<void> deleteMessage(String chatId, String messageId) async {
+    final messages = _messages[chatId];
+    if (messages == null) return;
+    messages.removeWhere((m) => m.id == messageId);
+  }
+
   Future<void> addMessage(Message message) async {
     _messages.putIfAbsent(message.chatId, () => []);
     _messages[message.chatId]!.add(message);
@@ -249,6 +256,56 @@ class ChatRepository {
     if (index != -1) {
       messages[index] = message;
     }
+  }
+
+  Future<Chat> ensureChatExists(Chat chat) async {
+    final accessToken = await _authService?.getValidToken();
+    if (accessToken == null) {
+      _chatCache[chat.id] = chat;
+      _messages.putIfAbsent(chat.id, () => []);
+      return chat;
+    }
+
+    try {
+      final detail = await getChatDetail(chat.id);
+      if (detail != null) {
+        final localPreview = _lastPreviewCache[chat.id];
+        if (localPreview != null && localPreview.trim().isNotEmpty) {
+          detail.lastMessagePreview = localPreview;
+        }
+        _chatCache[detail.id] = detail;
+        _messages.putIfAbsent(detail.id, () => _messages[chat.id] ?? []);
+        return detail;
+      }
+    } catch (_) {
+      // Fallback to create chat below.
+    }
+
+    final draft = Chat(
+      id: chat.id,
+      title: chat.title.trim().isEmpty ? 'New Chat' : chat.title,
+      createdAt: chat.createdAt,
+      updatedAt: chat.updatedAt,
+      lastMessagePreview: chat.lastMessagePreview,
+    );
+    final created = await createChat(draft);
+    if (created.id != chat.id) {
+      final oldMessages = _messages.remove(chat.id);
+      if (oldMessages != null) {
+        _messages.putIfAbsent(created.id, () => oldMessages);
+      } else {
+        _messages.putIfAbsent(created.id, () => []);
+      }
+      _chatCache.remove(chat.id);
+      _serverTitleCache.remove(chat.id);
+      final preview = _lastPreviewCache.remove(chat.id);
+      if (preview != null) {
+        _lastPreviewCache[created.id] = preview;
+      }
+    } else {
+      _messages.putIfAbsent(created.id, () => []);
+    }
+    return created;
   }
 
   void dispose() {

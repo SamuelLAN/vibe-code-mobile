@@ -155,6 +155,13 @@ class AuthService extends ChangeNotifier {
     return _tokenManager.ensureValidToken();
   }
 
+  Future<bool> forceRefreshToken() async {
+    if (!_isInitialized) {
+      await _initialize();
+    }
+    return _tokenManager.forceRefresh();
+  }
+
   @override
   void dispose() {
     if (_isInitialized) {

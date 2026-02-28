@@ -4,15 +4,20 @@ import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 
 import '../models/git_models.dart';
+import 'auth_service.dart';
 import 'settings_service.dart';
 
 class GitService extends ChangeNotifier {
-  GitService({SettingsService? settings})
-      : _settings = settings ?? SettingsService();
+  GitService({
+    SettingsService? settings,
+    AuthService? authService,
+  })  : _settings = settings ?? SettingsService(),
+        _authService = authService;
 
   static const String _defaultProjectName = 'vibe-code-mobile';
 
   final SettingsService _settings;
+  final AuthService? _authService;
 
   bool _busy = false;
   bool get isBusy => _busy;
@@ -452,7 +457,8 @@ class GitService extends ChangeNotifier {
   }) async {
     final baseUrl = await _settings.getGitBaseUrl();
     final repoPath = await _settings.getGitRepoPath();
-    final token = await _settings.getGitToken();
+    final token =
+        await _authService?.getValidToken() ?? await _settings.getGitToken();
     final startedAt = DateTime.now();
 
     if (baseUrl == null || baseUrl.isEmpty) {
