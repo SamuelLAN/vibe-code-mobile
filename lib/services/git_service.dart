@@ -553,28 +553,46 @@ class GitService extends ChangeNotifier {
   }
 
   GitCommit _parseCommit(Map<String, dynamic> item) {
+    final nestedCommit = item['commit'];
+    final commitMap = nestedCommit is Map<String, dynamic>
+        ? nestedCommit
+        : const <String, dynamic>{};
+    final merged = <String, dynamic>{...commitMap, ...item};
+
     final hash = _readString(
-      item,
-      ['hash', 'commit_hash', 'revision', 'sha', 'oid', 'id'],
+      merged,
+      [
+        'hash',
+        'commit_hash',
+        'revision',
+        'sha',
+        'oid',
+        'id',
+        'full_hash',
+        'commit_id',
+        'short_hash',
+        'short_sha',
+        'abbrev_hash',
+      ],
       fallback: 'unknown',
     );
     final message = _readString(
-      item,
+      merged,
       ['message', 'subject', 'title', 'summary'],
       fallback: '',
     );
-    final dateStr = _nullableString(item['date']) ??
-        _nullableString(item['commit_date']) ??
-        _nullableString(item['timestamp']) ??
-        _nullableString(item['committed_at']) ??
-        _nullableString(item['commit_time']);
+    final dateStr = _nullableString(merged['date']) ??
+        _nullableString(merged['commit_date']) ??
+        _nullableString(merged['timestamp']) ??
+        _nullableString(merged['committed_at']) ??
+        _nullableString(merged['commit_time']);
     return GitCommit(
       hash: hash,
       message: message,
       date: _parseDate(dateStr),
-      author: _nullableString(item['author']) ??
-          _nullableString(item['author_name']) ??
-          _nullableString(item['committer']),
+      author: _nullableString(merged['author']) ??
+          _nullableString(merged['author_name']) ??
+          _nullableString(merged['committer']),
     );
   }
 
