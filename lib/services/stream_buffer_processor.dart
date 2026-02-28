@@ -45,7 +45,7 @@ class StreamBufferProcessor {
     var i = 0;
     while (i < _buffer.length) {
       if (_startsWithAt(_Tags.functionCall, i)) {
-        final result = _extractBlock(i, _Tags.functionCall.length, false);
+        final result = _extractBlock(i, _Tags.functionCall.length, true);
         if (result.found) {
           final element = _createElement(
               StreamElementType.functionCall, result.content, true);
@@ -194,7 +194,7 @@ class StreamBufferProcessor {
       searchStart = firstNewLine + 1;
     }
 
-    final endIndex = _buffer.indexOf(_Tags.closing, searchStart);
+    final endIndex = _findClosingFenceIndex(searchStart);
     if (endIndex == -1) {
       return _ExtractResult(found: false, content: '', endIndex: startIndex);
     }
@@ -204,6 +204,16 @@ class StreamBufferProcessor {
         _buffer.substring(endIndex + _Tags.closing.length);
 
     return _ExtractResult(found: true, content: content, endIndex: startIndex);
+  }
+
+  int _findClosingFenceIndex(int searchStart) {
+    // Prefer a line-start closing fence (\\n```), which avoids matching
+    // backticks that may appear in JSON string fields (for example args.text).
+    final lineStartFence = _buffer.indexOf('\n${_Tags.closing}', searchStart);
+    if (lineStartFence != -1) {
+      return lineStartFence + 1;
+    }
+    return _buffer.indexOf(_Tags.closing, searchStart);
   }
 
   String _trimExceptNewlines(String str) {

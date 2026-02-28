@@ -59,6 +59,29 @@ String _formatJsonDisplay(Map<String, dynamic>? data) {
   return const JsonEncoder.withIndent('  ').convert(data);
 }
 
+Map<String, dynamic>? _extractFunctionArgsMap(Map<String, dynamic>? parsed) {
+  if (parsed == null) return null;
+  final raw = parsed['args'] ?? parsed['arguments'];
+  if (raw is Map<String, dynamic>) return raw;
+  if (raw is Map) {
+    return raw.map((k, v) => MapEntry(k.toString(), v));
+  }
+  if (raw is String) {
+    final decoded = _tryParseJson(raw);
+    if (decoded != null) return decoded;
+  }
+  return null;
+}
+
+String? _extractSaveToSharedMemoryText(Map<String, dynamic>? callParsed) {
+  final args = _extractFunctionArgsMap(callParsed);
+  final text = args?['text'];
+  if (text is String && text.trim().isNotEmpty) {
+    return text.trim();
+  }
+  return null;
+}
+
 class MessageBubble extends StatelessWidget {
   const MessageBubble({
     super.key,
@@ -236,6 +259,9 @@ class _AssistantMessageContent extends StatelessWidget {
     final functionItemIndexById = <String, int>{};
 
     for (final element in elements) {
+      if (_shouldIgnoreFunctionResultElement(element)) {
+        continue;
+      }
       final isFunction = element.type == StreamElementType.functionCall ||
           element.type == StreamElementType.functionResult;
       final functionId = element.metadata?['functionId']?.toString();
@@ -273,6 +299,14 @@ class _AssistantMessageContent extends StatelessWidget {
     }
 
     return items;
+  }
+
+  bool _shouldIgnoreFunctionResultElement(StreamElement element) {
+    if (element.type != StreamElementType.functionResult) return false;
+
+    final functionName = element.metadata?['functionName']?.toString() ??
+        _tryParseJson(element.content)?['name']?.toString();
+    return functionName == 'save_to_shared_memory';
   }
 
   Widget _buildRenderItem(_StreamRenderItem item) {
@@ -554,6 +588,15 @@ class _FunctionTimelineBlockState extends State<_FunctionTimelineBlock> {
       );
     }
 
+    if (functionName == 'save_to_shared_memory') {
+      final text = _extractSaveToSharedMemoryText(callParsed);
+      return _FunctionSummary(
+        icon: Icons.bookmark_add_outlined,
+        title: 'Save to shared memory',
+        subtitle: (text == null || text.isEmpty) ? null : text,
+      );
+    }
+
     if (functionName == 'read_files') {
       final args = (callParsed?['args'] ?? callParsed?['arguments']);
       final argPaths = _extractReadFilePaths(args);
@@ -688,6 +731,17 @@ class _FunctionTimelineBlockState extends State<_FunctionTimelineBlock> {
     if (functionName == 'gsearch') {
       final body = _buildGSearchExpandedBody(resultParsed, isDark);
       if (body != null) return body;
+    }
+
+    if (functionName == 'save_to_shared_memory') {
+      final text = _extractSaveToSharedMemoryText(callParsed);
+      if (text != null && text.isNotEmpty) {
+        return _EnhancedMarkdown(
+          content: text,
+          isDark: isDark,
+        );
+      }
+      return const SizedBox.shrink();
     }
 
     if (functionName == 'navigate_to') {
@@ -3229,6 +3283,9 @@ class _PreCodeBlockBuilder extends MarkdownElementBuilder {
     if (functionName == 'gsearch') {
       return _buildGSearchCallBlock(parsed, content);
     }
+    if (functionName == 'save_to_shared_memory') {
+      return _buildSaveToSharedMemoryCallBlock(parsed);
+    }
     if (functionName == 'navigate_to') {
       final widget = _buildNavigateToCallBlock(parsed);
       if (widget != null) return widget;
@@ -3346,6 +3403,10 @@ class _PreCodeBlockBuilder extends MarkdownElementBuilder {
     final parsed = _tryParseJson(content);
     final functionName = parsed?['name']?.toString();
 
+    if (functionName == 'save_to_shared_memory') {
+      return const SizedBox.shrink();
+    }
+
     if (functionName == 'gsearch') {
       final gsearchWidget = _buildGSearchResultBlock(parsed, content);
       if (gsearchWidget != null) {
@@ -3455,6 +3516,71 @@ class _PreCodeBlockBuilder extends MarkdownElementBuilder {
             ),
           ),
         ],
+      ),
+    );
+  }
+
+  Widget _buildSaveToSharedMemoryCallBlock(Map<String, dynamic>? parsed) {
+    final text = _extractSaveToSharedMemoryText(parsed);
+    final tileColor = isDark ? Colors.blueGrey[900] : Colors.blueGrey[50];
+    final textColor = isDark ? Colors.grey[200] : Colors.blueGrey[800];
+
+    return Container(
+      width: double.infinity,
+      margin: const EdgeInsets.symmetric(vertical: 8),
+      decoration: BoxDecoration(
+        color: tileColor,
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(
+          color: Colors.blueGrey.withValues(alpha: 0.35),
+          width: 1,
+        ),
+      ),
+      child: Theme(
+        data: ThemeData().copyWith(dividerColor: Colors.transparent),
+        child: ExpansionTile(
+          tilePadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 0),
+          childrenPadding: const EdgeInsets.fromLTRB(12, 0, 12, 12),
+          iconColor: textColor,
+          collapsedIconColor: textColor,
+          leading: const Icon(Icons.bookmark_add_outlined,
+              size: 16, color: Colors.blueGrey),
+          title: Text(
+            'Save to shared memory',
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: TextStyle(
+              fontSize: 12,
+              fontWeight: FontWeight.w600,
+              color: textColor,
+            ),
+          ),
+          children: [
+            if (text != null && text.isNotEmpty)
+              Container(
+                width: double.infinity,
+                padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(
+                  color: isDark
+                      ? Colors.black.withValues(alpha: 0.2)
+                      : Colors.white,
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: _EnhancedMarkdown(
+                  content: text,
+                  isDark: isDark,
+                ),
+              )
+            else
+              Text(
+                'No text',
+                style: TextStyle(
+                  fontSize: 11,
+                  color: isDark ? Colors.grey[500] : Colors.grey[600],
+                ),
+              ),
+          ],
+        ),
       ),
     );
   }
