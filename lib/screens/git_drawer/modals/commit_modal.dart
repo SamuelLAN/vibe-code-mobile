@@ -13,7 +13,8 @@ class CommitModal extends StatefulWidget {
   });
 
   final List<GitWorktreeFile> files;
-  final void Function(String message, List<String> filePaths, bool addAll) onConfirm;
+  final void Function(String message, List<String> filePaths, bool addAll)
+      onConfirm;
   final Future<String> Function(List<String> filePaths) onGenerateMessage;
 
   @override
@@ -71,8 +72,12 @@ class _CommitModalState extends State<CommitModal> {
     if (_generatingMessage) return;
     setState(() => _generatingMessage = true);
     try {
-      final selectedPaths = _files.where((f) => f.staged).map((f) => f.path).toList();
-      final generated = await widget.onGenerateMessage(selectedPaths);
+      final selectedPaths =
+          _files.where((f) => f.staged).map((f) => f.path).toList();
+      final selectedAll =
+          selectedPaths.length == _files.length && _files.isNotEmpty;
+      final generated = await widget
+          .onGenerateMessage(selectedAll ? const <String>[] : selectedPaths);
       if (!mounted) return;
       final trimmed = generated.trim();
       if (trimmed.isEmpty) {
@@ -102,7 +107,8 @@ class _CommitModalState extends State<CommitModal> {
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final selectedCount = _files.where((f) => f.staged).length;
-    final canSubmit = _controller.text.trim().isNotEmpty && (selectedCount > 0 || _files.isNotEmpty);
+    final canSubmit = _controller.text.trim().isNotEmpty &&
+        (selectedCount > 0 || _files.isNotEmpty);
 
     return GestureDetector(
       onTap: () => FocusScope.of(context).unfocus(),
@@ -111,7 +117,8 @@ class _CommitModalState extends State<CommitModal> {
           color: isDark ? const Color(0xFF1E1E1E) : Colors.white,
           borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
         ),
-        padding: EdgeInsets.only(bottom: MediaQuery.of(context).viewInsets.bottom),
+        padding:
+            EdgeInsets.only(bottom: MediaQuery.of(context).viewInsets.bottom),
         child: SafeArea(
           child: Column(
             mainAxisSize: MainAxisSize.min,
@@ -157,7 +164,8 @@ class _CommitModalState extends State<CommitModal> {
                         maxLength: 72,
                         maxLines: 3,
                         onChanged: (_) => setState(() {}),
-                        style: TextStyle(color: isDark ? Colors.white : Colors.black87),
+                        style: TextStyle(
+                            color: isDark ? Colors.white : Colors.black87),
                         decoration: InputDecoration(
                           hintText: '提交信息...',
                           hintStyle: TextStyle(color: Colors.grey[500]),
@@ -170,12 +178,14 @@ class _CommitModalState extends State<CommitModal> {
                           counterText: '',
                           suffixIcon: IconButton(
                             tooltip: '生成 Commit Message',
-                            onPressed: _generatingMessage ? null : _generateMessage,
+                            onPressed:
+                                _generatingMessage ? null : _generateMessage,
                             icon: _generatingMessage
                                 ? const SizedBox(
                                     width: 18,
                                     height: 18,
-                                    child: CircularProgressIndicator(strokeWidth: 2),
+                                    child: CircularProgressIndicator(
+                                        strokeWidth: 2),
                                   )
                                 : const Icon(Icons.auto_awesome_rounded),
                           ),
@@ -185,31 +195,42 @@ class _CommitModalState extends State<CommitModal> {
                       if (_files.isNotEmpty)
                         Row(
                           children: [
-                            Expanded(child: ActionButton(label: '全部暂存', onTap: _stageAll)),
+                            Expanded(
+                                child: ActionButton(
+                                    label: '全部暂存', onTap: _stageAll)),
                             const SizedBox(width: 8),
-                            Expanded(child: ActionButton(label: '取消暂存', onTap: _unstageAll)),
+                            Expanded(
+                                child: ActionButton(
+                                    label: '取消暂存', onTap: _unstageAll)),
                           ],
                         ),
                       if (_files.isNotEmpty) const SizedBox(height: 12),
                       if (_files.isEmpty)
                         Padding(
                           padding: const EdgeInsets.symmetric(vertical: 12),
-                          child: Text('当前没有可提交的变更文件', style: TextStyle(color: Colors.grey[600])),
+                          child: Text('当前没有可提交的变更文件',
+                              style: TextStyle(color: Colors.grey[600])),
                         ),
                       ..._files.map((f) => _buildFileRow(context, f, isDark)),
                       const SizedBox(height: 16),
                       ElevatedButton(
                         style: ElevatedButton.styleFrom(
-                          backgroundColor: Theme.of(context).colorScheme.primary,
+                          backgroundColor:
+                              Theme.of(context).colorScheme.primary,
                           foregroundColor: Colors.white,
                           padding: const EdgeInsets.symmetric(vertical: 14),
-                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                          shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(12)),
                         ),
                         onPressed: canSubmit
                             ? () => widget.onConfirm(
                                   _controller.text.trim(),
-                                  _files.where((f) => f.staged).map((f) => f.path).toList(),
-                                  selectedCount == _files.length && _files.isNotEmpty,
+                                  _files
+                                      .where((f) => f.staged)
+                                      .map((f) => f.path)
+                                      .toList(),
+                                  selectedCount == _files.length &&
+                                      _files.isNotEmpty,
                                 )
                             : null,
                         child: Row(
@@ -217,7 +238,9 @@ class _CommitModalState extends State<CommitModal> {
                           children: [
                             const Icon(Icons.commit_rounded, size: 18),
                             const SizedBox(width: 8),
-                            Text(_files.isEmpty ? '提交' : '提交 $selectedCount 个文件'),
+                            Text(_files.isEmpty
+                                ? '提交'
+                                : '提交 $selectedCount 个文件'),
                           ],
                         ),
                       ),
@@ -232,7 +255,8 @@ class _CommitModalState extends State<CommitModal> {
     );
   }
 
-  Widget _buildFileRow(BuildContext context, _CommitSelectionFile f, bool isDark) {
+  Widget _buildFileRow(
+      BuildContext context, _CommitSelectionFile f, bool isDark) {
     return InkWell(
       onTap: () => _toggleStage(f.path),
       child: Padding(
@@ -243,14 +267,20 @@ class _CommitModalState extends State<CommitModal> {
               width: 20,
               height: 20,
               decoration: BoxDecoration(
-                color: f.staged ? Theme.of(context).colorScheme.primary : Colors.transparent,
+                color: f.staged
+                    ? Theme.of(context).colorScheme.primary
+                    : Colors.transparent,
                 borderRadius: BorderRadius.circular(5),
                 border: Border.all(
-                  color: f.staged ? Theme.of(context).colorScheme.primary : Colors.grey[400]!,
+                  color: f.staged
+                      ? Theme.of(context).colorScheme.primary
+                      : Colors.grey[400]!,
                   width: 1.5,
                 ),
               ),
-              child: f.staged ? const Icon(Icons.check, size: 12, color: Colors.white) : null,
+              child: f.staged
+                  ? const Icon(Icons.check, size: 12, color: Colors.white)
+                  : null,
             ),
             const SizedBox(width: 10),
             Expanded(
