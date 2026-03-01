@@ -29,7 +29,8 @@ class _GitDrawerState extends State<GitDrawer> {
   ProjectOpStatus _runDevStatus = ProjectOpStatus.stopped;
   ProjectOpStatus _runPreviewStatus = ProjectOpStatus.stopped;
   ProjectOpStatus _installStatus = ProjectOpStatus.idle;
-  ProjectOpStatus _stopStatus = ProjectOpStatus.idle;
+  ProjectOpStatus _stopDevStatus = ProjectOpStatus.idle;
+  ProjectOpStatus _stopPreviewStatus = ProjectOpStatus.idle;
   ProjectOpStatus _npmCommandStatus = ProjectOpStatus.idle;
 
   GitSummary? _summary;
@@ -69,14 +70,18 @@ class _GitDrawerState extends State<GitDrawer> {
         _runStatus = results[1] as GitRunStatus;
         _worktree = results[2] as GitWorktreeStatus;
         _pushPreview = results[3] as GitPushSummary;
-        final running = _runStatus.runningTaskCount > 0;
-        if (running) {
+        final devRunning = _isTaskRunning('dev');
+        final previewRunning = _isTaskRunning('preview');
+        if (devRunning) {
           _runDevStatus = ProjectOpStatus.running;
-          _runPreviewStatus = ProjectOpStatus.running;
         } else {
           if (_runDevStatus == ProjectOpStatus.running) {
             _runDevStatus = ProjectOpStatus.stopped;
           }
+        }
+        if (previewRunning) {
+          _runPreviewStatus = ProjectOpStatus.running;
+        } else {
           if (_runPreviewStatus == ProjectOpStatus.running) {
             _runPreviewStatus = ProjectOpStatus.stopped;
           }
@@ -88,6 +93,18 @@ class _GitDrawerState extends State<GitDrawer> {
       setState(() => _initialLoading = false);
       _showToast('加载 Git 状态失败: $e', color: GitColors.error);
     }
+  }
+
+  bool _isTaskRunning(String scriptName) {
+    final key = 'npm run $scriptName';
+    for (final task in _runStatus.tasks) {
+      final command = (task.command ?? '').toLowerCase();
+      final taskName = task.taskName.toLowerCase();
+      if (command.contains(key) || taskName.contains(key)) {
+        return true;
+      }
+    }
+    return false;
   }
 
   void _showToast(String message, {Color? color}) {
@@ -136,35 +153,77 @@ class _GitDrawerState extends State<GitDrawer> {
     });
   }
 
-  Future<void> _runProjectOperation({
-    required Future<GitOperationResult> Function() action,
-    required ProjectOpStatus successStatus,
-    ProjectOpStatus failureStatus = ProjectOpStatus.idle,
+  Future<void> _runProjectSseOperation({
+    required String sheetTitle,
+    required Stream<GitSseEvent> stream,
     required void Function(ProjectOpStatus) setStatus,
-    required String successFallback,
+    required ProjectOpStatus successStatus,
+    ProjectOpStatus errorStatus = ProjectOpStatus.idle,
+    String successFallback = '操作完成',
+    String errorFallback = '操作失败',
     bool refreshAfter = true,
   }) async {
     HapticFeedback.mediumImpact();
     setStatus(ProjectOpStatus.running);
-    final result = await action();
-    if (!mounted) return;
 
-    if (result.success) {
-      setStatus(successStatus);
-      _showToast(result.message.isNotEmpty ? result.message : successFallback);
-      if (refreshAfter) {
-        await _refreshSliderData();
-      }
-      if (successStatus != ProjectOpStatus.running) {
-        Future.delayed(const Duration(milliseconds: 1800), () {
-          if (mounted) setStatus(ProjectOpStatus.idle);
-        });
-      }
-      return;
-    }
+    final shared = stream.asBroadcastStream();
+    var resolved = false;
+    final subscription = shared.listen(
+      (event) {
+        final name = event.name.toLowerCase();
+        if (name == 'completed' && !resolved) {
+          resolved = true;
+          setStatus(successStatus);
+          _showToast(_eventMessage(event) ?? successFallback);
+          if (refreshAfter) {
+            unawaited(_refreshSliderData());
+          }
+          if (successStatus != ProjectOpStatus.running) {
+            Future.delayed(const Duration(milliseconds: 1800), () {
+              if (mounted) setStatus(ProjectOpStatus.idle);
+            });
+          }
+        } else if (name == 'error' && !resolved) {
+          resolved = true;
+          setStatus(errorStatus);
+          _showToast(_eventMessage(event) ?? errorFallback,
+              color: GitColors.error);
+        }
+      },
+      onDone: () {
+        if (resolved || !mounted) return;
+        setStatus(ProjectOpStatus.idle);
+      },
+      onError: (_) {
+        if (resolved || !mounted) return;
+        setStatus(errorStatus);
+      },
+    );
 
-    setStatus(failureStatus);
-    _showToast(result.message, color: GitColors.error);
+    await showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (_) => FractionallySizedBox(
+        heightFactor: 0.8,
+        child: RunStreamModal(
+          title: sheetTitle,
+          stream: shared,
+        ),
+      ),
+    );
+
+    await subscription.cancel();
+  }
+
+  String? _eventMessage(GitSseEvent event) {
+    final data = event.data;
+    if (data == null) return null;
+    final msg = data['msg']?.toString();
+    if (msg != null && msg.trim().isNotEmpty) return msg.trim();
+    final line = data['line']?.toString();
+    if (line != null && line.trim().isNotEmpty) return line.trim();
+    return null;
   }
 
   @override
@@ -174,7 +233,9 @@ class _GitDrawerState extends State<GitDrawer> {
     final summary = _summary;
     final currentBranch = summary?.branch ?? 'main';
     final commitsAhead = _pushPreview?.aheadCount ?? summary?.aheadCount ?? 0;
-    final running = _runStatus.runningTaskCount > 0;
+    final devRunning = _isTaskRunning('dev');
+    final previewRunning = _isTaskRunning('preview');
+    final running = devRunning || previewRunning;
 
     return Drawer(
       width: MediaQuery.of(context).size.width * 0.85,
@@ -203,8 +264,9 @@ class _GitDrawerState extends State<GitDrawer> {
                                 sublabel: '执行项目构建',
                                 status: _buildStatus,
                                 accentColor: GitColors.warning,
-                                onPress: () => _runProjectOperation(
-                                  action: _git.runBuild,
+                                onPress: () => _runProjectSseOperation(
+                                  sheetTitle: 'build',
+                                  stream: _git.streamRunBuild(),
                                   successStatus: ProjectOpStatus.idle,
                                   successFallback: '构建完成',
                                   setStatus: (s) =>
@@ -217,8 +279,9 @@ class _GitDrawerState extends State<GitDrawer> {
                                 sublabel: '安装项目依赖',
                                 status: _installStatus,
                                 accentColor: GitColors.commit,
-                                onPress: () => _runProjectOperation(
-                                  action: _git.installDependencies,
+                                onPress: () => _runProjectSseOperation(
+                                  sheetTitle: 'install',
+                                  stream: _git.streamInstallDependencies(),
                                   successStatus: ProjectOpStatus.idle,
                                   successFallback: '依赖安装完成',
                                   setStatus: (s) =>
@@ -228,23 +291,23 @@ class _GitDrawerState extends State<GitDrawer> {
                               _buildProjectOpButton(
                                 icon: Icons.play_arrow_rounded,
                                 label: 'run dev',
-                                sublabel: running
-                                    ? '${_runStatus.runningTaskCount} 个任务运行中'
-                                    : '启动开发服务器',
+                                sublabel: devRunning ? 'dev 服务运行中' : '启动开发服务器',
                                 status: _runDevStatus,
                                 accentColor: GitColors.success,
-                                isRunning: running,
-                                onPress: () => _runProjectOperation(
-                                  action: _git.startRunDev,
+                                isRunning: devRunning,
+                                onPress: () => _runProjectSseOperation(
+                                  sheetTitle: 'run dev',
+                                  stream: _git.streamRunDev(),
                                   successStatus: ProjectOpStatus.running,
                                   successFallback: '开发服务器已启动',
                                   setStatus: (s) =>
                                       setState(() => _runDevStatus = s),
                                 ),
-                                onStop: () => _runProjectOperation(
-                                  action: _git.stopAllRuns,
+                                onStop: () => _runProjectSseOperation(
+                                  sheetTitle: 'stop dev',
+                                  stream: _git.streamStopDev(),
                                   successStatus: ProjectOpStatus.stopped,
-                                  successFallback: '已停止所有服务',
+                                  successFallback: '已停止 dev 服务',
                                   setStatus: (s) =>
                                       setState(() => _runDevStatus = s),
                                 ),
@@ -252,39 +315,57 @@ class _GitDrawerState extends State<GitDrawer> {
                               _buildProjectOpButton(
                                 icon: Icons.slideshow_rounded,
                                 label: 'run preview',
-                                sublabel: running
-                                    ? '${_runStatus.runningTaskCount} 个任务运行中'
+                                sublabel: previewRunning
+                                    ? 'preview 服务运行中'
                                     : '启动预览服务器',
                                 status: _runPreviewStatus,
                                 accentColor: GitColors.push,
-                                isRunning: running,
-                                onPress: () => _runProjectOperation(
-                                  action: _git.startRunPreview,
+                                isRunning: previewRunning,
+                                onPress: () => _runProjectSseOperation(
+                                  sheetTitle: 'run preview',
+                                  stream: _git.streamRunPreview(),
                                   successStatus: ProjectOpStatus.running,
                                   successFallback: '预览服务已启动',
                                   setStatus: (s) =>
                                       setState(() => _runPreviewStatus = s),
                                 ),
-                                onStop: () => _runProjectOperation(
-                                  action: _git.stopAllRuns,
+                                onStop: () => _runProjectSseOperation(
+                                  sheetTitle: 'stop preview',
+                                  stream: _git.streamStopPreview(),
                                   successStatus: ProjectOpStatus.stopped,
-                                  successFallback: '已停止所有服务',
+                                  successFallback: '已停止 preview 服务',
                                   setStatus: (s) =>
                                       setState(() => _runPreviewStatus = s),
                                 ),
                               ),
                               _buildProjectOpButton(
                                 icon: Icons.stop_rounded,
-                                label: 'stop',
-                                sublabel: '停止所有运行中的服务',
-                                status: _stopStatus,
+                                label: 'stop dev',
+                                sublabel: '停止 dev 服务',
+                                status: _stopDevStatus,
                                 accentColor: GitColors.error,
-                                onPress: () => _runProjectOperation(
-                                  action: _git.stopAllRuns,
+                                onPress: () => _runProjectSseOperation(
+                                  sheetTitle: 'stop dev',
+                                  stream: _git.streamStopDev(),
                                   successStatus: ProjectOpStatus.stopped,
-                                  successFallback: '已停止所有服务',
+                                  successFallback: '已停止 dev 服务',
                                   setStatus: (s) =>
-                                      setState(() => _stopStatus = s),
+                                      setState(() => _stopDevStatus = s),
+                                ),
+                              ),
+                              _buildProjectOpButton(
+                                icon: Icons.stop_circle_outlined,
+                                label: 'stop preview',
+                                sublabel: '停止 preview 服务',
+                                status: _stopPreviewStatus,
+                                accentColor: GitColors.error,
+                                onPress: () => _runProjectSseOperation(
+                                  sheetTitle: 'stop preview',
+                                  stream: _git.streamStopPreview(),
+                                  successStatus: ProjectOpStatus.stopped,
+                                  successFallback: '已停止 preview 服务',
+                                  setStatus: (s) =>
+                                      setState(() => _stopPreviewStatus = s),
                                 ),
                               ),
                               _buildProjectOpButton(
@@ -1148,8 +1229,9 @@ class _GitDrawerState extends State<GitDrawer> {
     final input = await _showNpmCommandDialog(context);
     if (input == null || !mounted) return;
 
-    await _runProjectOperation(
-      action: () => _git.runNpmCommand(
+    await _runProjectSseOperation(
+      sheetTitle: 'npm command',
+      stream: _git.streamRunNpmCommand(
         command: input.command,
         timeoutSeconds: input.timeoutSeconds,
       ),

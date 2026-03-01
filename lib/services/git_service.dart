@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 
 import 'package:flutter/foundation.dart';
@@ -158,6 +159,91 @@ class GitService extends ChangeNotifier {
         'command': command,
         'timeout_seconds': timeoutSeconds,
       },
+    );
+  }
+
+  Stream<GitSseEvent> streamRunBuild({
+    String? projectName,
+  }) {
+    return _postSse(
+      '/vibe/git/project/run/build',
+      body: {},
+      projectName: projectName,
+    );
+  }
+
+  Stream<GitSseEvent> streamRunDev({
+    String? projectName,
+  }) {
+    return _postSse(
+      '/vibe/git/project/run/start/dev',
+      body: {},
+      projectName: projectName,
+    );
+  }
+
+  Stream<GitSseEvent> streamRunPreview({
+    String? projectName,
+  }) {
+    return _postSse(
+      '/vibe/git/project/run/start/preview',
+      body: {},
+      projectName: projectName,
+    );
+  }
+
+  Stream<GitSseEvent> streamInstallDependencies({
+    String? projectName,
+  }) {
+    return _postSse(
+      '/vibe/git/project/run/install',
+      body: {},
+      projectName: projectName,
+    );
+  }
+
+  Stream<GitSseEvent> streamRunNpmCommand({
+    required String command,
+    int timeoutSeconds = 900,
+    String? projectName,
+  }) {
+    return _postSse(
+      '/vibe/git/project/run/npm/command',
+      body: {
+        'command': command,
+        'timeout_seconds': timeoutSeconds,
+      },
+      projectName: projectName,
+    );
+  }
+
+  Stream<GitSseEvent> streamStopAllRuns({
+    String? projectName,
+  }) {
+    return _postSse(
+      '/vibe/git/project/run/stop',
+      body: {},
+      projectName: projectName,
+    );
+  }
+
+  Stream<GitSseEvent> streamStopDev({
+    String? projectName,
+  }) {
+    return _postSse(
+      '/vibe/git/project/run/stop/dev',
+      body: {},
+      projectName: projectName,
+    );
+  }
+
+  Stream<GitSseEvent> streamStopPreview({
+    String? projectName,
+  }) {
+    return _postSse(
+      '/vibe/git/project/run/stop/preview',
+      body: {},
+      projectName: projectName,
     );
   }
 
@@ -495,6 +581,125 @@ class GitService extends ChangeNotifier {
     required Map<String, dynamic> body,
   }) async {
     return _request(method: 'POST', path: path, body: body);
+  }
+
+  Stream<GitSseEvent> _postSse(
+    String path, {
+    required Map<String, dynamic> body,
+    String? projectName,
+  }) async* {
+    final baseUrl = await _settings.getGitBaseUrl();
+    final repoPath = await _settings.getGitRepoPath();
+    final token =
+        await _authService?.getValidToken() ?? await _settings.getGitToken();
+    final effectiveProjectName = await _effectiveProjectName(projectName);
+    final requestBody = <String, dynamic>{
+      ...body,
+      'project_name': effectiveProjectName,
+    };
+
+    if (baseUrl == null || baseUrl.isEmpty) {
+      yield GitSseEvent(
+        name: 'error',
+        rawData: '{"msg":"Git backend not configured."}',
+        data: {'msg': 'Git backend not configured.'},
+      );
+      return;
+    }
+
+    final uri = Uri.parse('$baseUrl$path').replace(
+      queryParameters: {
+        if (repoPath != null && repoPath.isNotEmpty) 'repo_path': repoPath,
+      },
+    );
+
+    final request = http.Request('POST', uri)
+      ..headers['Content-Type'] = 'application/json'
+      ..headers['Accept'] = 'text/event-stream'
+      ..body = jsonEncode(requestBody);
+    if (token != null && token.isNotEmpty) {
+      request.headers['Authorization'] = 'Bearer $token';
+    }
+
+    _log('POST $path [SSE] start body=${jsonEncode(requestBody)}');
+    _busy = true;
+    notifyListeners();
+
+    http.StreamedResponse? response;
+    final client = http.Client();
+    try {
+      response = await client.send(request);
+      final httpSuccess =
+          response.statusCode >= 200 && response.statusCode < 300;
+      if (!httpSuccess) {
+        final errorBody = await response.stream.bytesToString();
+        final decoded = _safeDecode(errorBody);
+        final message = _extractMessage(decoded) ?? 'Git operation failed.';
+        yield GitSseEvent(
+          name: 'error',
+          rawData: errorBody,
+          data: {
+            'msg': message,
+            if (decoded is Map<String, dynamic>) ...decoded,
+          },
+        );
+        return;
+      }
+
+      String? currentEvent;
+      final dataLines = <String>[];
+
+      GitSseEvent flushEvent() {
+        final eventName = (currentEvent ?? 'message').trim();
+        final rawData = dataLines.join('\n');
+        Map<String, dynamic>? parsed;
+        if (rawData.isNotEmpty) {
+          final decoded = _safeDecode(rawData);
+          if (decoded is Map<String, dynamic>) {
+            parsed = decoded;
+          }
+        }
+        currentEvent = null;
+        dataLines.clear();
+        return GitSseEvent(name: eventName, rawData: rawData, data: parsed);
+      }
+
+      await for (final line in response.stream
+          .transform(utf8.decoder)
+          .transform(const LineSplitter())) {
+        if (line.isEmpty) {
+          if (currentEvent != null || dataLines.isNotEmpty) {
+            yield flushEvent();
+          }
+          continue;
+        }
+        if (line.startsWith('event:')) {
+          currentEvent = line.substring(6).trim();
+          continue;
+        }
+        if (line.startsWith('data:')) {
+          var data = line.substring(5);
+          if (data.startsWith(' ')) {
+            data = data.substring(1);
+          }
+          dataLines.add(data);
+        }
+      }
+
+      if (currentEvent != null || dataLines.isNotEmpty) {
+        yield flushEvent();
+      }
+    } catch (e) {
+      yield GitSseEvent(
+        name: 'error',
+        rawData: '{"msg":"Request failed: $e"}',
+        data: {'msg': 'Request failed: $e'},
+      );
+    } finally {
+      client.close();
+      _busy = false;
+      notifyListeners();
+    }
   }
 
   Future<GitOperationResult> _request({

@@ -133,3 +133,19 @@ class GitFileDiff {
   final String? afterContent;
   final String? patch;
 }
+
+class GitSseEvent {
+  GitSseEvent({
+    required this.name,
+    required this.rawData,
+    this.data,
+  });
+
+  final String name;
+  final String rawData;
+  final Map<String, dynamic>? data;
+
+  bool get isCompleted => name == 'completed';
+  bool get isError => name == 'error';
+  bool get isLog => name == 'log';
+}
