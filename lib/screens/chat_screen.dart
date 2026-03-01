@@ -43,6 +43,7 @@ class _ChatScreenState extends State<ChatScreen> {
   void initState() {
     super.initState();
     _audioPlayer.init();
+    _scrollController.addListener(_handleHistoryPaginationScroll);
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _warmupMicrophonePermission();
     });
@@ -50,11 +51,23 @@ class _ChatScreenState extends State<ChatScreen> {
 
   @override
   void dispose() {
+    _scrollController.removeListener(_handleHistoryPaginationScroll);
     _textController.dispose();
     _scrollController.dispose();
     _audioRecorder.dispose();
     _audioPlayer.dispose();
     super.dispose();
+  }
+
+  void _handleHistoryPaginationScroll() {
+    if (!_scrollController.hasClients) return;
+    final position = _scrollController.position;
+    if (position.pixels <= 72) {
+      final chat = context.read<ChatService>();
+      if (chat.hasMoreHistory && !chat.isLoadingOlderHistory) {
+        chat.loadOlderHistory();
+      }
+    }
   }
 
   Future<void> _warmupMicrophonePermission() async {
@@ -421,9 +434,40 @@ class _ChatScreenState extends State<ChatScreen> {
                             ScrollViewKeyboardDismissBehavior.onDrag,
                         padding: const EdgeInsets.symmetric(
                             horizontal: 16, vertical: 12),
-                        itemCount: messages.length,
+                        itemCount: messages.length + 1,
                         itemBuilder: (context, index) {
-                          final message = messages[index];
+                          if (index == 0) {
+                            if (chat.isLoadingOlderHistory) {
+                              return const Padding(
+                                padding: EdgeInsets.only(bottom: 8),
+                                child: Center(
+                                  child: SizedBox(
+                                    width: 18,
+                                    height: 18,
+                                    child: CircularProgressIndicator(
+                                      strokeWidth: 2,
+                                    ),
+                                  ),
+                                ),
+                              );
+                            }
+                            if (chat.hasMoreHistory) {
+                              return const Padding(
+                                padding: EdgeInsets.only(bottom: 8),
+                                child: Center(
+                                  child: Text(
+                                    '上滑加载更多历史',
+                                    style: TextStyle(
+                                      fontSize: 12,
+                                      color: Colors.grey,
+                                    ),
+                                  ),
+                                ),
+                              );
+                            }
+                            return const SizedBox.shrink();
+                          }
+                          final message = messages[index - 1];
                           return MessageBubble(
                             message: message,
                             audioPlayer: _audioPlayer,

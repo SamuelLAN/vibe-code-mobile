@@ -15,7 +15,7 @@ class ChatRepository {
     AuthService? authService,
     SettingsService? settings,
     http.Client? client,
-    String projectName = 'vibe-code-mobile',
+    String projectName = 'plutux-board',
   })  : _authService = authService,
         _settings = settings,
         _client = client ?? http.Client(),
@@ -169,6 +169,38 @@ class ChatRepository {
       _serverTitleCache[chat.id] = chat.title;
     } catch (e) {
       debugPrint('[ChatRepository] renameChat failed for ${chat.id}: $e');
+    }
+  }
+
+  Future<String?> generateChatTitle(String userMsg) async {
+    final trimmed = userMsg.trim();
+    if (trimmed.isEmpty) return null;
+
+    final accessToken = await _authService?.getValidToken();
+    if (accessToken == null) return null;
+
+    try {
+      final uri =
+          Uri.parse('${ApiConfig.codeBaseUrl}/vibe/coding/chat/title/generate');
+      final response = await _client.post(
+        uri,
+        headers: {
+          'Authorization': 'Bearer $accessToken',
+          'Content-Type': 'application/json',
+        },
+        body: jsonEncode({'user_msg': trimmed}),
+      );
+      if (response.statusCode != 200) {
+        throw ApiException.fromResponse(response);
+      }
+
+      final decoded = jsonDecode(response.body);
+      final title = _extractGeneratedTitle(decoded);
+      if (title == null || title.trim().isEmpty) return null;
+      return title.trim();
+    } catch (e) {
+      debugPrint('[ChatRepository] generateChatTitle failed: $e');
+      return null;
     }
   }
 
@@ -364,6 +396,27 @@ class ChatRepository {
       }
       return decoded;
     }
+    return null;
+  }
+
+  String? _extractGeneratedTitle(dynamic decoded) {
+    if (decoded is! Map) return null;
+    final map = Map<String, dynamic>.from(decoded);
+
+    final direct = map['title'];
+    if (direct != null && direct.toString().trim().isNotEmpty) {
+      return direct.toString();
+    }
+
+    final data = map['data'];
+    if (data is Map) {
+      final dataMap = Map<String, dynamic>.from(data);
+      final fromData = dataMap['title'];
+      if (fromData != null && fromData.toString().trim().isNotEmpty) {
+        return fromData.toString();
+      }
+    }
+
     return null;
   }
 

@@ -36,7 +36,10 @@ class ChatService extends ChangeNotifier {
   final TranscribeApiClient _transcribeClient;
   final CodingStreamApiClient _codingStreamClient;
   final Uuid _uuid = const Uuid();
-  static const String _defaultProjectName = 'vibe-code-mobile';
+  static const String _defaultProjectName = 'plutux-board';
+  static const int _flowIdsPageSize = 50;
+  static const int _initialFlowBatchSize = 3;
+  static const int _olderFlowBatchSize = 3;
 
   List<Chat> _chats = [];
   Chat? _activeChat;
@@ -49,6 +52,12 @@ class ChatService extends ChangeNotifier {
   final Map<String, StreamBufferProcessor> _streamProcessors = {};
   final Set<String> _historyLoadedChatIds = {};
   final Map<String, String> _lastSyncedFlowSignatureByChat = {};
+  final Set<String> _titleGeneratedChatIds = {};
+  final Map<String, List<String>> _knownFlowIdsNewestByChat = {};
+  final Map<String, int> _flowIdOffsetByChat = {};
+  final Set<String> _flowIdsExhaustedChats = {};
+  final Map<String, int> _loadedFlowCountByChat = {};
+  bool _isLoadingOlderHistory = false;
 
   static const int _chatNotFoundErrorCode = 3001;
 
@@ -57,6 +66,12 @@ class ChatService extends ChangeNotifier {
   List<Message> get messages => _messages;
   bool get isGenerating => _isGenerating;
   String? get error => _error;
+  bool get isLoadingOlderHistory => _isLoadingOlderHistory;
+  bool get hasMoreHistory {
+    final chatId = _activeChat?.id;
+    if (chatId == null) return false;
+    return _hasMoreFlowHistory(chatId);
+  }
 
   Future<void> initialize() async {
     await _repo.init();
@@ -104,6 +119,32 @@ class ChatService extends ChangeNotifier {
     notifyListeners();
   }
 
+  Future<void> loadOlderHistory() async {
+    final chatId = _activeChat?.id;
+    if (chatId == null) return;
+    if (_isLoadingOlderHistory || !_hasMoreFlowHistory(chatId)) return;
+
+    final accessToken = await _authService?.getValidToken();
+    if (accessToken == null) return;
+
+    _isLoadingOlderHistory = true;
+    notifyListeners();
+    try {
+      await _loadNextFlowBatch(
+        chatId: chatId,
+        accessToken: accessToken,
+        batchSize: _olderFlowBatchSize,
+      );
+      if (_activeChat?.id == chatId) {
+        _messages = await _repo.getMessages(chatId);
+      }
+      await _updateChatPreviewFromMessages(chatId);
+    } finally {
+      _isLoadingOlderHistory = false;
+      notifyListeners();
+    }
+  }
+
   Future<void> newChat() async {
     final draftChat = Chat(
       id: _uuid.v4(),
@@ -114,16 +155,14 @@ class ChatService extends ChangeNotifier {
     final createdChat = await _repo.createChat(draftChat);
     _chats.removeWhere((c) => c.id == createdChat.id);
     _chats.insert(0, createdChat);
-    _historyLoadedChatIds.remove(createdChat.id);
-    _lastSyncedFlowSignatureByChat.remove(createdChat.id);
+    _resetHistorySyncState(createdChat.id);
     await selectChat(createdChat.id);
   }
 
   Future<void> deleteChat(String chatId) async {
     await _repo.deleteChat(chatId);
     _chats.removeWhere((chat) => chat.id == chatId);
-    _historyLoadedChatIds.remove(chatId);
-    _lastSyncedFlowSignatureByChat.remove(chatId);
+    _resetHistorySyncState(chatId);
     if (_activeChat?.id == chatId) {
       if (_chats.isEmpty) {
         await newChat();
@@ -147,17 +186,30 @@ class ChatService extends ChangeNotifier {
     if (_activeChat == null) return;
     _error = null;
     await _ensureActiveChatReady();
+    final chatId = _activeChat!.id;
+    final trimmedText = text.trim();
+    final shouldGenerateTitle = _messages.isEmpty &&
+        trimmedText.isNotEmpty &&
+        !_titleGeneratedChatIds.contains(chatId);
 
     final userMessage = Message(
       id: _uuid.v4(),
-      chatId: _activeChat!.id,
+      chatId: chatId,
       role: MessageRole.user,
-      content: text.trim(),
+      content: trimmedText,
       createdAt: DateTime.now(),
       attachments: attachments,
     );
     await _repo.addMessage(userMessage);
     _messages.add(userMessage);
+
+    if (shouldGenerateTitle) {
+      _titleGeneratedChatIds.add(chatId);
+      unawaited(_generateTitleFromFirstMessage(
+        chatId: chatId,
+        firstMessage: trimmedText,
+      ));
+    }
 
     await _updateChatMeta(_buildPreviewText(text, attachments));
     notifyListeners();
@@ -435,6 +487,30 @@ class ChatService extends ChangeNotifier {
         text.length > 60 ? '${text.substring(0, 60)}…' : text;
     await _repo.updateChat(_activeChat!);
     await refreshChats();
+  }
+
+  Future<void> _generateTitleFromFirstMessage({
+    required String chatId,
+    required String firstMessage,
+  }) async {
+    final generatedTitle = await _repo.generateChatTitle(firstMessage);
+    if (generatedTitle == null || generatedTitle.trim().isEmpty) return;
+
+    final index = _chats.indexWhere((chat) => chat.id == chatId);
+    if (index == -1) return;
+
+    final chat = _chats[index];
+    if (chat.title == generatedTitle) return;
+
+    chat.title = generatedTitle;
+    chat.updatedAt = DateTime.now();
+    if (_activeChat?.id == chatId) {
+      _activeChat!.title = generatedTitle;
+      _activeChat!.updatedAt = chat.updatedAt;
+    }
+    _chats.sort((a, b) => b.updatedAt.compareTo(a.updatedAt));
+    await _repo.updateChat(chat);
+    notifyListeners();
   }
 
   Future<_GenerationResult> _generateAssistantResponse(
@@ -813,12 +889,10 @@ class ChatService extends ChangeNotifier {
     }
 
     _activeChat = chat;
-    _historyLoadedChatIds.remove(chat.id);
-    _lastSyncedFlowSignatureByChat.remove(chat.id);
+    _resetHistorySyncState(chat.id);
 
     if (previousId != null && previousId != chat.id) {
-      _historyLoadedChatIds.remove(previousId);
-      _lastSyncedFlowSignatureByChat.remove(previousId);
+      _resetHistorySyncState(previousId);
       if (previousMessages.isEmpty) {
         _messages = await _repo.getMessages(chat.id);
         notifyListeners();
@@ -851,59 +925,34 @@ class ChatService extends ChangeNotifier {
     if (accessToken == null) return;
 
     try {
-      final flowIdsData = await _codingStreamClient.getChatFlowIds(
-        accessToken: accessToken,
+      final latestSignature = await _latestFlowSignature(
         chatId: chatId,
-        limit: 500,
-        offset: 0,
+        accessToken: accessToken,
       );
-      if (flowIdsData == null || flowIdsData.items.isEmpty) {
+      if (latestSignature == null) {
         _historyLoadedChatIds.add(chatId);
         _lastSyncedFlowSignatureByChat.remove(chatId);
         return;
       }
 
-      final flowIds = List<String>.from(flowIdsData.items);
-      final latestFlowId = flowIdsData.newestFirst ? flowIds.first : flowIds.last;
-      final latestStatus = await _codingStreamClient.getFlowStatus(
-        accessToken: accessToken,
-        flowId: latestFlowId,
-      );
-      final latestSignature = '$latestFlowId|${latestStatus.name}';
+      final previousSignature = _lastSyncedFlowSignatureByChat[chatId];
+      if (previousSignature != null && previousSignature != latestSignature) {
+        _resetHistorySyncState(chatId);
+      }
       final hasStreamingLocal = _messages.any((m) => m.isStreaming);
       final shouldRefresh = !_historyLoadedChatIds.contains(chatId) ||
-          _lastSyncedFlowSignatureByChat[chatId] != latestSignature ||
-          hasStreamingLocal;
+          previousSignature != latestSignature ||
+          hasStreamingLocal ||
+          _messages.isEmpty;
       if (!shouldRefresh) {
         return;
       }
 
-      final orderedFlowIds =
-          flowIdsData.newestFirst ? flowIds.reversed.toList() : flowIds;
-      final loadedMessages = <Message>[];
-      final seenSignatures = <String>{};
-
-      for (final flowId in orderedFlowIds) {
-        try {
-          final events = await _codingStreamClient.getFlowData(
-            accessToken: accessToken,
-            flowId: flowId,
-          );
-          final flowMessages =
-              _extractMessagesFromFlowEvents(chatId: chatId, events: events);
-          for (final message in flowMessages) {
-            final sig = _messageSignature(message);
-            if (seenSignatures.add(sig)) {
-              loadedMessages.add(message);
-            }
-          }
-        } catch (e) {
-          debugPrint('[ChatService] load flow history failed for $flowId: $e');
-        }
-      }
-
-      loadedMessages.sort((a, b) => a.createdAt.compareTo(b.createdAt));
-      await _repo.replaceMessages(chatId, loadedMessages);
+      await _loadNextFlowBatch(
+        chatId: chatId,
+        accessToken: accessToken,
+        batchSize: _initialFlowBatchSize,
+      );
       _messages = await _repo.getMessages(chatId);
       _historyLoadedChatIds.add(chatId);
       _lastSyncedFlowSignatureByChat[chatId] = latestSignature;
@@ -914,18 +963,192 @@ class ChatService extends ChangeNotifier {
     }
   }
 
+  Future<void> _loadNextFlowBatch({
+    required String chatId,
+    required String accessToken,
+    required int batchSize,
+  }) async {
+    await _ensureFlowIdsAvailable(
+      chatId: chatId,
+      accessToken: accessToken,
+      minimumNeeded: batchSize,
+    );
+
+    final known = _knownFlowIdsNewestByChat[chatId] ?? const <String>[];
+    final loadedCount = _loadedFlowCountByChat[chatId] ?? 0;
+    if (known.isEmpty || loadedCount >= known.length) {
+      return;
+    }
+    final end = (loadedCount + batchSize) > known.length
+        ? known.length
+        : (loadedCount + batchSize);
+    final selectedFlowIds = known.sublist(loadedCount, end);
+    final loadedMessages = <Message>[];
+    final seenSignatures = <String>{};
+
+    for (final flowId in selectedFlowIds) {
+      try {
+        final events = await _codingStreamClient.getFlowData(
+          accessToken: accessToken,
+          flowId: flowId,
+        );
+        final flowMessages = _extractMessagesFromFlowEvents(
+          chatId: chatId,
+          flowId: flowId,
+          events: events,
+        );
+        for (final message in flowMessages) {
+          final sig = _messageSignature(message);
+          if (seenSignatures.add(sig)) {
+            loadedMessages.add(message);
+          }
+        }
+      } catch (e) {
+        debugPrint('[ChatService] load flow history failed for $flowId: $e');
+      }
+    }
+
+    final existing = await _repo.getMessages(chatId);
+    final merged = _mergeMessagesChronologically(existing, loadedMessages);
+    await _repo.replaceMessages(chatId, merged);
+    _loadedFlowCountByChat[chatId] = end;
+  }
+
+  Future<void> _ensureFlowIdsAvailable({
+    required String chatId,
+    required String accessToken,
+    required int minimumNeeded,
+  }) async {
+    while (true) {
+      final known = _knownFlowIdsNewestByChat[chatId] ?? const <String>[];
+      final loadedCount = _loadedFlowCountByChat[chatId] ?? 0;
+      if (known.length - loadedCount >= minimumNeeded) {
+        return;
+      }
+      if (_flowIdsExhaustedChats.contains(chatId)) {
+        return;
+      }
+      await _fetchNextFlowIdsPage(chatId: chatId, accessToken: accessToken);
+    }
+  }
+
+  Future<void> _fetchNextFlowIdsPage({
+    required String chatId,
+    required String accessToken,
+  }) async {
+    final offset = _flowIdOffsetByChat[chatId] ?? 0;
+    final data = await _codingStreamClient.getChatFlowIds(
+      accessToken: accessToken,
+      chatId: chatId,
+      limit: _flowIdsPageSize,
+      offset: offset,
+    );
+    if (data == null || data.items.isEmpty) {
+      _flowIdsExhaustedChats.add(chatId);
+      return;
+    }
+
+    final normalized = data.newestFirst
+        ? List<String>.from(data.items)
+        : data.items.reversed.toList();
+    final known = _knownFlowIdsNewestByChat.putIfAbsent(chatId, () => <String>[]);
+    final knownSet = known.toSet();
+    for (final flowId in normalized) {
+      if (knownSet.add(flowId)) {
+        known.add(flowId);
+      }
+    }
+    _flowIdOffsetByChat[chatId] = offset + data.items.length;
+
+    if (data.items.length < _flowIdsPageSize || known.length >= data.total) {
+      _flowIdsExhaustedChats.add(chatId);
+    }
+  }
+
+  Future<String?> _latestFlowSignature({
+    required String chatId,
+    required String accessToken,
+  }) async {
+    await _ensureFlowIdsAvailable(
+      chatId: chatId,
+      accessToken: accessToken,
+      minimumNeeded: 1,
+    );
+    final known = _knownFlowIdsNewestByChat[chatId] ?? const <String>[];
+    if (known.isEmpty) return null;
+
+    final latestFlowId = known.first;
+    final latestStatus = await _codingStreamClient.getFlowStatus(
+      accessToken: accessToken,
+      flowId: latestFlowId,
+    );
+    return '$latestFlowId|${latestStatus.name}';
+  }
+
+  List<Message> _mergeMessagesChronologically(
+    List<Message> existing,
+    List<Message> incoming,
+  ) {
+    if (incoming.isEmpty) {
+      return List<Message>.from(existing)
+        ..sort((a, b) => a.createdAt.compareTo(b.createdAt));
+    }
+    final merged = List<Message>.from(existing)..addAll(incoming);
+    final unique = <Message>[];
+    final seen = <String>{};
+    for (final message in merged) {
+      final sig = _messageSignature(message);
+      if (seen.add(sig)) {
+        unique.add(message);
+      }
+    }
+    unique.sort((a, b) => a.createdAt.compareTo(b.createdAt));
+    return unique;
+  }
+
+  bool _hasMoreFlowHistory(String chatId) {
+    if (!_historyLoadedChatIds.contains(chatId)) {
+      return false;
+    }
+    final known = _knownFlowIdsNewestByChat[chatId] ?? const <String>[];
+    final loadedCount = _loadedFlowCountByChat[chatId] ?? 0;
+    if (loadedCount < known.length) {
+      return true;
+    }
+    return !_flowIdsExhaustedChats.contains(chatId);
+  }
+
+  void _resetHistorySyncState(String chatId) {
+    _historyLoadedChatIds.remove(chatId);
+    _lastSyncedFlowSignatureByChat.remove(chatId);
+    _knownFlowIdsNewestByChat.remove(chatId);
+    _flowIdOffsetByChat.remove(chatId);
+    _flowIdsExhaustedChats.remove(chatId);
+    _loadedFlowCountByChat.remove(chatId);
+  }
+
   List<Message> _extractMessagesFromFlowEvents({
     required String chatId,
+    required String flowId,
     required List<CodingStreamEvent> events,
   }) {
     final messages = <Message>[];
     final assistantBuffer = StringBuffer();
+    final fallbackCreatedAt = _createdAtFromFlowId(flowId) ?? DateTime.now();
     DateTime? assistantCreatedAt;
+    var fallbackTick = 0;
+
+    DateTime nextFallbackCreatedAt() {
+      final value = fallbackCreatedAt.add(Duration(milliseconds: fallbackTick));
+      fallbackTick += 1;
+      return value;
+    }
 
     for (final event in events) {
       final extracted = _extractStructuredMessagesFromEvent(
         chatId: chatId,
         event: event,
+        fallbackCreatedAt: nextFallbackCreatedAt(),
       );
       if (extracted.isNotEmpty) {
         if (assistantBuffer.isNotEmpty) {
@@ -935,7 +1158,7 @@ class ChatService extends ChangeNotifier {
               chatId: chatId,
               role: MessageRole.assistant,
               content: assistantBuffer.toString(),
-              createdAt: assistantCreatedAt ?? DateTime.now(),
+              createdAt: assistantCreatedAt ?? nextFallbackCreatedAt(),
               attachments: [],
               isStreaming: false,
             ),
@@ -952,7 +1175,7 @@ class ChatService extends ChangeNotifier {
       }
       final text = (event.text ?? '').trim();
       if (text.isEmpty) continue;
-      assistantCreatedAt ??= DateTime.now();
+      assistantCreatedAt ??= nextFallbackCreatedAt();
       assistantBuffer.write(text);
     }
 
@@ -963,7 +1186,7 @@ class ChatService extends ChangeNotifier {
           chatId: chatId,
           role: MessageRole.assistant,
           content: assistantBuffer.toString(),
-          createdAt: assistantCreatedAt ?? DateTime.now(),
+          createdAt: assistantCreatedAt ?? nextFallbackCreatedAt(),
           attachments: [],
           isStreaming: false,
         ),
@@ -976,6 +1199,7 @@ class ChatService extends ChangeNotifier {
   List<Message> _extractStructuredMessagesFromEvent({
     required String chatId,
     required CodingStreamEvent event,
+    required DateTime fallbackCreatedAt,
   }) {
     final rawData = event.rawData;
     if (rawData == null || rawData.isEmpty) {
@@ -988,7 +1212,11 @@ class ChatService extends ChangeNotifier {
       _collectMessageLikeMaps(decoded, candidates);
       final messages = <Message>[];
       for (final map in candidates) {
-        final message = _messageFromHistoryMap(chatId: chatId, map: map);
+        final message = _messageFromHistoryMap(
+          chatId: chatId,
+          map: map,
+          fallbackCreatedAt: fallbackCreatedAt,
+        );
         if (message != null) {
           messages.add(message);
         }
@@ -1029,12 +1257,13 @@ class ChatService extends ChangeNotifier {
   Message? _messageFromHistoryMap({
     required String chatId,
     required Map<String, dynamic> map,
+    required DateTime fallbackCreatedAt,
   }) {
     final role = _toRole(map);
     if (role == null) return null;
     final content = _extractContentText(map).trim();
     if (content.isEmpty) return null;
-    final createdAt = _extractCreatedAt(map) ?? DateTime.now();
+    final createdAt = _extractCreatedAt(map) ?? fallbackCreatedAt;
 
     return Message(
       id: (map['message_id'] ?? map['id'] ?? _uuid.v4()).toString(),
@@ -1129,6 +1358,13 @@ class ChatService extends ChangeNotifier {
       return DateTime.fromMillisecondsSinceEpoch(ms);
     }
     return DateTime.tryParse(text);
+  }
+
+  DateTime? _createdAtFromFlowId(String flowId) {
+    if (flowId.length < 13) return null;
+    final ts = int.tryParse(flowId.substring(0, 13));
+    if (ts == null) return null;
+    return DateTime.fromMillisecondsSinceEpoch(ts);
   }
 
   String _messageSignature(Message message) {
