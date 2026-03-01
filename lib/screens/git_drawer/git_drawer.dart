@@ -25,8 +25,12 @@ class _GitDrawerState extends State<GitDrawer> {
   GitOpStatus _stashStatus = GitOpStatus.idle;
   GitOpStatus _stashPopStatus = GitOpStatus.idle;
 
-  ProjectOpStatus _npmStartStatus = ProjectOpStatus.stopped;
-  ProjectOpStatus _npmInstallStatus = ProjectOpStatus.idle;
+  ProjectOpStatus _buildStatus = ProjectOpStatus.idle;
+  ProjectOpStatus _runDevStatus = ProjectOpStatus.stopped;
+  ProjectOpStatus _runPreviewStatus = ProjectOpStatus.stopped;
+  ProjectOpStatus _installStatus = ProjectOpStatus.idle;
+  ProjectOpStatus _stopStatus = ProjectOpStatus.idle;
+  ProjectOpStatus _npmCommandStatus = ProjectOpStatus.idle;
 
   GitSummary? _summary;
   GitPushSummary? _pushPreview;
@@ -67,9 +71,15 @@ class _GitDrawerState extends State<GitDrawer> {
         _pushPreview = results[3] as GitPushSummary;
         final running = _runStatus.runningTaskCount > 0;
         if (running) {
-          _npmStartStatus = ProjectOpStatus.running;
-        } else if (_npmStartStatus == ProjectOpStatus.running) {
-          _npmStartStatus = ProjectOpStatus.stopped;
+          _runDevStatus = ProjectOpStatus.running;
+          _runPreviewStatus = ProjectOpStatus.running;
+        } else {
+          if (_runDevStatus == ProjectOpStatus.running) {
+            _runDevStatus = ProjectOpStatus.stopped;
+          }
+          if (_runPreviewStatus == ProjectOpStatus.running) {
+            _runPreviewStatus = ProjectOpStatus.stopped;
+          }
         }
         _initialLoading = false;
       });
@@ -129,6 +139,7 @@ class _GitDrawerState extends State<GitDrawer> {
   Future<void> _runProjectOperation({
     required Future<GitOperationResult> Function() action,
     required ProjectOpStatus successStatus,
+    ProjectOpStatus failureStatus = ProjectOpStatus.idle,
     required void Function(ProjectOpStatus) setStatus,
     required String successFallback,
     bool refreshAfter = true,
@@ -152,7 +163,7 @@ class _GitDrawerState extends State<GitDrawer> {
       return;
     }
 
-    setStatus(ProjectOpStatus.stopped);
+    setStatus(failureStatus);
     _showToast(result.message, color: GitColors.error);
   }
 
@@ -187,55 +198,113 @@ class _GitDrawerState extends State<GitDrawer> {
                               const SizedBox(height: 8),
                               _buildSectionTitle('项目运行'),
                               _buildProjectOpButton(
-                                icon: Icons.play_arrow_rounded,
-                                label: 'npm run dev',
-                                sublabel: running
-                                    ? '${_runStatus.runningTaskCount} 个任务运行中'
-                                    : '启动开发服务器',
-                                status: _npmStartStatus,
-                                accentColor: GitColors.success,
-                                isRunning: running,
+                                icon: Icons.build_rounded,
+                                label: 'build',
+                                sublabel: '执行项目构建',
+                                status: _buildStatus,
+                                accentColor: GitColors.warning,
                                 onPress: () => _runProjectOperation(
-                                  action: _git.startRun,
-                                  successStatus: ProjectOpStatus.running,
-                                  successFallback: '开发服务器已启动',
+                                  action: _git.runBuild,
+                                  successStatus: ProjectOpStatus.idle,
+                                  successFallback: '构建完成',
                                   setStatus: (s) =>
-                                      setState(() => _npmStartStatus = s),
-                                ),
-                                onStop: () => _runProjectOperation(
-                                  action: _git.stopAllRuns,
-                                  successStatus: ProjectOpStatus.stopped,
-                                  successFallback: '已停止所有服务',
-                                  setStatus: (s) =>
-                                      setState(() => _npmStartStatus = s),
+                                      setState(() => _buildStatus = s),
                                 ),
                               ),
                               _buildProjectOpButton(
                                 icon: Icons.download_rounded,
-                                label: 'npm install',
+                                label: 'install',
                                 sublabel: '安装项目依赖',
-                                status: _npmInstallStatus,
+                                status: _installStatus,
                                 accentColor: GitColors.commit,
                                 onPress: () => _runProjectOperation(
                                   action: _git.installDependencies,
                                   successStatus: ProjectOpStatus.idle,
                                   successFallback: '依赖安装完成',
                                   setStatus: (s) =>
-                                      setState(() => _npmInstallStatus = s),
+                                      setState(() => _installStatus = s),
+                                ),
+                              ),
+                              _buildProjectOpButton(
+                                icon: Icons.play_arrow_rounded,
+                                label: 'run dev',
+                                sublabel: running
+                                    ? '${_runStatus.runningTaskCount} 个任务运行中'
+                                    : '启动开发服务器',
+                                status: _runDevStatus,
+                                accentColor: GitColors.success,
+                                isRunning: running,
+                                onPress: () => _runProjectOperation(
+                                  action: _git.startRunDev,
+                                  successStatus: ProjectOpStatus.running,
+                                  successFallback: '开发服务器已启动',
+                                  setStatus: (s) =>
+                                      setState(() => _runDevStatus = s),
+                                ),
+                                onStop: () => _runProjectOperation(
+                                  action: _git.stopAllRuns,
+                                  successStatus: ProjectOpStatus.stopped,
+                                  successFallback: '已停止所有服务',
+                                  setStatus: (s) =>
+                                      setState(() => _runDevStatus = s),
+                                ),
+                              ),
+                              _buildProjectOpButton(
+                                icon: Icons.slideshow_rounded,
+                                label: 'run preview',
+                                sublabel: running
+                                    ? '${_runStatus.runningTaskCount} 个任务运行中'
+                                    : '启动预览服务器',
+                                status: _runPreviewStatus,
+                                accentColor: GitColors.push,
+                                isRunning: running,
+                                onPress: () => _runProjectOperation(
+                                  action: _git.startRunPreview,
+                                  successStatus: ProjectOpStatus.running,
+                                  successFallback: '预览服务已启动',
+                                  setStatus: (s) =>
+                                      setState(() => _runPreviewStatus = s),
+                                ),
+                                onStop: () => _runProjectOperation(
+                                  action: _git.stopAllRuns,
+                                  successStatus: ProjectOpStatus.stopped,
+                                  successFallback: '已停止所有服务',
+                                  setStatus: (s) =>
+                                      setState(() => _runPreviewStatus = s),
                                 ),
                               ),
                               _buildProjectOpButton(
                                 icon: Icons.stop_rounded,
-                                label: 'Stop',
+                                label: 'stop',
                                 sublabel: '停止所有运行中的服务',
-                                status: ProjectOpStatus.stopped,
+                                status: _stopStatus,
                                 accentColor: GitColors.error,
                                 onPress: () => _runProjectOperation(
                                   action: _git.stopAllRuns,
                                   successStatus: ProjectOpStatus.stopped,
                                   successFallback: '已停止所有服务',
                                   setStatus: (s) =>
-                                      setState(() => _npmStartStatus = s),
+                                      setState(() => _stopStatus = s),
+                                ),
+                              ),
+                              _buildProjectOpButton(
+                                icon: Icons.terminal_rounded,
+                                label: 'npm command',
+                                sublabel: '执行 npm run/install/ci 指令',
+                                status: _npmCommandStatus,
+                                accentColor: GitColors.branch,
+                                onPress: _runCustomNpmCommand,
+                              ),
+                              const SizedBox(height: 4),
+                              Padding(
+                                padding:
+                                    const EdgeInsets.symmetric(horizontal: 8),
+                                child: Text(
+                                  '允许: npm run build/dev/preview/prod/lint/test, npm install, npm ci',
+                                  style: TextStyle(
+                                    fontSize: 11,
+                                    color: Colors.grey[600],
+                                  ),
                                 ),
                               ),
                               const SizedBox(height: 16),
@@ -1075,6 +1144,96 @@ class _GitDrawerState extends State<GitDrawer> {
     );
   }
 
+  Future<void> _runCustomNpmCommand() async {
+    final input = await _showNpmCommandDialog(context);
+    if (input == null || !mounted) return;
+
+    await _runProjectOperation(
+      action: () => _git.runNpmCommand(
+        command: input.command,
+        timeoutSeconds: input.timeoutSeconds,
+      ),
+      successStatus: ProjectOpStatus.idle,
+      successFallback: 'npm 命令执行完成',
+      setStatus: (s) => setState(() => _npmCommandStatus = s),
+    );
+  }
+
+  Future<_NpmCommandInput?> _showNpmCommandDialog(BuildContext context) async {
+    final commandController = TextEditingController(text: 'npm run build');
+    final timeoutController = TextEditingController(text: '900');
+
+    final result = await showDialog<_NpmCommandInput>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('执行 npm 命令'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            TextField(
+              controller: commandController,
+              decoration: const InputDecoration(
+                labelText: 'Command',
+                hintText: 'npm run build',
+              ),
+              autofocus: true,
+              textInputAction: TextInputAction.next,
+            ),
+            const SizedBox(height: 12),
+            TextField(
+              controller: timeoutController,
+              decoration: const InputDecoration(
+                labelText: 'Timeout (seconds)',
+                hintText: '900',
+              ),
+              keyboardType: TextInputType.number,
+            ),
+            const SizedBox(height: 8),
+            Text(
+              '仅允许 npm run build/dev/preview/prod/lint/test, npm install, npm ci',
+              style: TextStyle(fontSize: 12, color: Colors.grey[600]),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext),
+            child: const Text('取消'),
+          ),
+          FilledButton(
+            onPressed: () {
+              final command = commandController.text.trim();
+              if (command.isEmpty) {
+                _showToast('请输入 npm 命令', color: GitColors.error);
+                return;
+              }
+
+              final timeoutValue = int.tryParse(timeoutController.text.trim());
+              if (timeoutValue == null || timeoutValue <= 0) {
+                _showToast('Timeout 必须是正整数', color: GitColors.error);
+                return;
+              }
+
+              Navigator.pop(
+                dialogContext,
+                _NpmCommandInput(
+                  command: command,
+                  timeoutSeconds: timeoutValue,
+                ),
+              );
+            },
+            child: const Text('执行'),
+          ),
+        ],
+      ),
+    );
+
+    commandController.dispose();
+    timeoutController.dispose();
+    return result;
+  }
+
   Future<void> _showPushModal(BuildContext context) async {
     try {
       final preview = await _git.getPushSummary();
@@ -1167,4 +1326,14 @@ class _GitDrawerState extends State<GitDrawer> {
       ),
     );
   }
+}
+
+class _NpmCommandInput {
+  const _NpmCommandInput({
+    required this.command,
+    required this.timeoutSeconds,
+  });
+
+  final String command;
+  final int timeoutSeconds;
 }

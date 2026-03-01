@@ -58,8 +58,14 @@ class GitService extends ChangeNotifier {
     );
   }
 
-  Future<GitRunStatus> getRunStatus() async {
-    final response = await _get('/vibe/git/project/run/status');
+  Future<GitRunStatus> getRunStatus({
+    String? projectName,
+  }) async {
+    final effectiveProjectName = await _effectiveProjectName(projectName);
+    final response = await _get(
+      '/vibe/git/project/run/status',
+      query: {'project_name': effectiveProjectName},
+    );
     if (!response.success) throw Exception(response.message);
     final payload = _payload(response.details);
     if (payload is Map<String, dynamic>) {
@@ -89,12 +95,32 @@ class GitService extends ChangeNotifier {
     return GitRunStatus(runningTaskCount: 0, tasks: const []);
   }
 
-  Future<GitOperationResult> startRun({
+  Future<GitOperationResult> runBuild({
     String? projectName,
   }) async {
     final effectiveProjectName = await _effectiveProjectName(projectName);
     return _post(
-      '/vibe/git/project/run/start',
+      '/vibe/git/project/run/build',
+      body: {'project_name': effectiveProjectName},
+    );
+  }
+
+  Future<GitOperationResult> startRunDev({
+    String? projectName,
+  }) async {
+    final effectiveProjectName = await _effectiveProjectName(projectName);
+    return _post(
+      '/vibe/git/project/run/start/dev',
+      body: {'project_name': effectiveProjectName},
+    );
+  }
+
+  Future<GitOperationResult> startRunPreview({
+    String? projectName,
+  }) async {
+    final effectiveProjectName = await _effectiveProjectName(projectName);
+    return _post(
+      '/vibe/git/project/run/start/preview',
       body: {'project_name': effectiveProjectName},
     );
   }
@@ -118,6 +144,28 @@ class GitService extends ChangeNotifier {
       body: {'project_name': effectiveProjectName},
     );
   }
+
+  Future<GitOperationResult> runNpmCommand({
+    required String command,
+    int timeoutSeconds = 900,
+    String? projectName,
+  }) async {
+    final effectiveProjectName = await _effectiveProjectName(projectName);
+    return _post(
+      '/vibe/git/project/run/npm/command',
+      body: {
+        'project_name': effectiveProjectName,
+        'command': command,
+        'timeout_seconds': timeoutSeconds,
+      },
+    );
+  }
+
+  // Backward-compatible wrapper for older callers.
+  Future<GitOperationResult> startRun({
+    String? projectName,
+  }) =>
+      startRunDev(projectName: projectName);
 
   Future<GitOperationResult> pull({
     String remote = 'origin',
