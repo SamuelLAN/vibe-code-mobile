@@ -248,6 +248,10 @@ class ChatRepository {
     _messages[message.chatId]!.add(message);
   }
 
+  Future<void> replaceMessages(String chatId, List<Message> messages) async {
+    _messages[chatId] = List<Message>.from(messages);
+  }
+
   Future<void> updateMessage(Message message) async {
     final messages = _messages[message.chatId];
     if (messages == null) return;

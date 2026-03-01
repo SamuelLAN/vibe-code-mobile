@@ -47,6 +47,8 @@ class ChatService extends ChangeNotifier {
   String? _currentFlowId;
   String? _activeGenerationId;
   final Map<String, StreamBufferProcessor> _streamProcessors = {};
+  final Set<String> _historyLoadedChatIds = {};
+  final Map<String, String> _lastSyncedFlowSignatureByChat = {};
 
   static const int _chatNotFoundErrorCode = 3001;
 
@@ -98,6 +100,7 @@ class ChatService extends ChangeNotifier {
       _activeChat = detail;
     }
     _messages = await _repo.getMessages(chatId);
+    await _syncRemoteHistoryIfNeeded(chatId);
     notifyListeners();
   }
 
@@ -111,12 +114,16 @@ class ChatService extends ChangeNotifier {
     final createdChat = await _repo.createChat(draftChat);
     _chats.removeWhere((c) => c.id == createdChat.id);
     _chats.insert(0, createdChat);
+    _historyLoadedChatIds.remove(createdChat.id);
+    _lastSyncedFlowSignatureByChat.remove(createdChat.id);
     await selectChat(createdChat.id);
   }
 
   Future<void> deleteChat(String chatId) async {
     await _repo.deleteChat(chatId);
     _chats.removeWhere((chat) => chat.id == chatId);
+    _historyLoadedChatIds.remove(chatId);
+    _lastSyncedFlowSignatureByChat.remove(chatId);
     if (_activeChat?.id == chatId) {
       if (_chats.isEmpty) {
         await newChat();
@@ -806,8 +813,12 @@ class ChatService extends ChangeNotifier {
     }
 
     _activeChat = chat;
+    _historyLoadedChatIds.remove(chat.id);
+    _lastSyncedFlowSignatureByChat.remove(chat.id);
 
     if (previousId != null && previousId != chat.id) {
+      _historyLoadedChatIds.remove(previousId);
+      _lastSyncedFlowSignatureByChat.remove(previousId);
       if (previousMessages.isEmpty) {
         _messages = await _repo.getMessages(chat.id);
         notifyListeners();
@@ -833,6 +844,312 @@ class ChatService extends ChangeNotifier {
       _messages = await _repo.getMessages(chat.id);
     }
     notifyListeners();
+  }
+
+  Future<void> _syncRemoteHistoryIfNeeded(String chatId) async {
+    final accessToken = await _authService?.getValidToken();
+    if (accessToken == null) return;
+
+    try {
+      final flowIdsData = await _codingStreamClient.getChatFlowIds(
+        accessToken: accessToken,
+        chatId: chatId,
+        limit: 500,
+        offset: 0,
+      );
+      if (flowIdsData == null || flowIdsData.items.isEmpty) {
+        _historyLoadedChatIds.add(chatId);
+        _lastSyncedFlowSignatureByChat.remove(chatId);
+        return;
+      }
+
+      final flowIds = List<String>.from(flowIdsData.items);
+      final latestFlowId = flowIdsData.newestFirst ? flowIds.first : flowIds.last;
+      final latestStatus = await _codingStreamClient.getFlowStatus(
+        accessToken: accessToken,
+        flowId: latestFlowId,
+      );
+      final latestSignature = '$latestFlowId|${latestStatus.name}';
+      final hasStreamingLocal = _messages.any((m) => m.isStreaming);
+      final shouldRefresh = !_historyLoadedChatIds.contains(chatId) ||
+          _lastSyncedFlowSignatureByChat[chatId] != latestSignature ||
+          hasStreamingLocal;
+      if (!shouldRefresh) {
+        return;
+      }
+
+      final orderedFlowIds =
+          flowIdsData.newestFirst ? flowIds.reversed.toList() : flowIds;
+      final loadedMessages = <Message>[];
+      final seenSignatures = <String>{};
+
+      for (final flowId in orderedFlowIds) {
+        try {
+          final events = await _codingStreamClient.getFlowData(
+            accessToken: accessToken,
+            flowId: flowId,
+          );
+          final flowMessages =
+              _extractMessagesFromFlowEvents(chatId: chatId, events: events);
+          for (final message in flowMessages) {
+            final sig = _messageSignature(message);
+            if (seenSignatures.add(sig)) {
+              loadedMessages.add(message);
+            }
+          }
+        } catch (e) {
+          debugPrint('[ChatService] load flow history failed for $flowId: $e');
+        }
+      }
+
+      loadedMessages.sort((a, b) => a.createdAt.compareTo(b.createdAt));
+      await _repo.replaceMessages(chatId, loadedMessages);
+      _messages = await _repo.getMessages(chatId);
+      _historyLoadedChatIds.add(chatId);
+      _lastSyncedFlowSignatureByChat[chatId] = latestSignature;
+      await _updateChatPreviewFromMessages(chatId);
+    } catch (e) {
+      debugPrint('[ChatService] load remote history failed for $chatId: $e');
+      _historyLoadedChatIds.add(chatId);
+    }
+  }
+
+  List<Message> _extractMessagesFromFlowEvents({
+    required String chatId,
+    required List<CodingStreamEvent> events,
+  }) {
+    final messages = <Message>[];
+    final assistantBuffer = StringBuffer();
+    DateTime? assistantCreatedAt;
+
+    for (final event in events) {
+      final extracted = _extractStructuredMessagesFromEvent(
+        chatId: chatId,
+        event: event,
+      );
+      if (extracted.isNotEmpty) {
+        if (assistantBuffer.isNotEmpty) {
+          messages.add(
+            Message(
+              id: _uuid.v4(),
+              chatId: chatId,
+              role: MessageRole.assistant,
+              content: assistantBuffer.toString(),
+              createdAt: assistantCreatedAt ?? DateTime.now(),
+              attachments: [],
+              isStreaming: false,
+            ),
+          );
+          assistantBuffer.clear();
+          assistantCreatedAt = null;
+        }
+        messages.addAll(extracted);
+        continue;
+      }
+
+      if (event.type != CodingStreamEventType.message) {
+        continue;
+      }
+      final text = (event.text ?? '').trim();
+      if (text.isEmpty) continue;
+      assistantCreatedAt ??= DateTime.now();
+      assistantBuffer.write(text);
+    }
+
+    if (assistantBuffer.isNotEmpty) {
+      messages.add(
+        Message(
+          id: _uuid.v4(),
+          chatId: chatId,
+          role: MessageRole.assistant,
+          content: assistantBuffer.toString(),
+          createdAt: assistantCreatedAt ?? DateTime.now(),
+          attachments: [],
+          isStreaming: false,
+        ),
+      );
+    }
+
+    return messages;
+  }
+
+  List<Message> _extractStructuredMessagesFromEvent({
+    required String chatId,
+    required CodingStreamEvent event,
+  }) {
+    final rawData = event.rawData;
+    if (rawData == null || rawData.isEmpty) {
+      return const <Message>[];
+    }
+
+    try {
+      final decoded = jsonDecode(rawData);
+      final candidates = <Map<String, dynamic>>[];
+      _collectMessageLikeMaps(decoded, candidates);
+      final messages = <Message>[];
+      for (final map in candidates) {
+        final message = _messageFromHistoryMap(chatId: chatId, map: map);
+        if (message != null) {
+          messages.add(message);
+        }
+      }
+      return messages;
+    } catch (_) {
+      return const <Message>[];
+    }
+  }
+
+  void _collectMessageLikeMaps(
+    dynamic node,
+    List<Map<String, dynamic>> out,
+  ) {
+    if (node is Map) {
+      final map = Map<String, dynamic>.from(node);
+      if (_looksLikeMessage(map)) {
+        out.add(map);
+      }
+      for (final value in map.values) {
+        _collectMessageLikeMaps(value, out);
+      }
+      return;
+    }
+    if (node is List) {
+      for (final item in node) {
+        _collectMessageLikeMaps(item, out);
+      }
+    }
+  }
+
+  bool _looksLikeMessage(Map<String, dynamic> map) {
+    final role = _toRole(map);
+    final content = _extractContentText(map);
+    return role != null && content.trim().isNotEmpty;
+  }
+
+  Message? _messageFromHistoryMap({
+    required String chatId,
+    required Map<String, dynamic> map,
+  }) {
+    final role = _toRole(map);
+    if (role == null) return null;
+    final content = _extractContentText(map).trim();
+    if (content.isEmpty) return null;
+    final createdAt = _extractCreatedAt(map) ?? DateTime.now();
+
+    return Message(
+      id: (map['message_id'] ?? map['id'] ?? _uuid.v4()).toString(),
+      chatId: chatId,
+      role: role,
+      content: content,
+      createdAt: createdAt,
+      attachments: [],
+      isStreaming: false,
+    );
+  }
+
+  MessageRole? _toRole(Map<String, dynamic> map) {
+    final roleText = (map['role'] ?? map['sender_role'] ?? map['sender'])
+        ?.toString()
+        .trim()
+        .toLowerCase();
+    if (roleText == null || roleText.isEmpty) return null;
+    if (roleText.contains('assistant') ||
+        roleText.contains('bot') ||
+        roleText.contains('model')) {
+      return MessageRole.assistant;
+    }
+    if (roleText.contains('user') || roleText.contains('human')) {
+      return MessageRole.user;
+    }
+    return null;
+  }
+
+  String _extractContentText(Map<String, dynamic> map) {
+    final dynamic content = map['content'] ??
+        map['message'] ??
+        map['msg'] ??
+        map['text'] ??
+        map['answer'] ??
+        map['question'];
+    return _flattenContentValue(content);
+  }
+
+  String _flattenContentValue(dynamic value) {
+    if (value == null) return '';
+    if (value is String) return value;
+    if (value is num || value is bool) return value.toString();
+    if (value is Map) {
+      final map = Map<String, dynamic>.from(value);
+      final nested = map['text'] ?? map['content'] ?? map['message'] ?? map['msg'];
+      if (nested != null) {
+        return _flattenContentValue(nested);
+      }
+      return '';
+    }
+    if (value is List) {
+      final parts = <String>[];
+      for (final item in value) {
+        final text = _flattenContentValue(item).trim();
+        if (text.isNotEmpty) {
+          parts.add(text);
+        }
+      }
+      return parts.join('\n');
+    }
+    return '';
+  }
+
+  DateTime? _extractCreatedAt(Map<String, dynamic> map) {
+    final raw = map['created_time'] ??
+        map['createdAt'] ??
+        map['created_at'] ??
+        map['timestamp'] ??
+        map['time'] ??
+        map['ts'];
+    return _parseDateTime(raw);
+  }
+
+  DateTime? _parseDateTime(dynamic value) {
+    if (value == null) return null;
+    if (value is DateTime) return value;
+    if (value is int) {
+      final ms = value > 1000000000000 ? value : value * 1000;
+      return DateTime.fromMillisecondsSinceEpoch(ms);
+    }
+    if (value is double) {
+      final intValue = value.toInt();
+      final ms = intValue > 1000000000000 ? intValue : intValue * 1000;
+      return DateTime.fromMillisecondsSinceEpoch(ms);
+    }
+    final text = value.toString().trim();
+    if (text.isEmpty) return null;
+    final asInt = int.tryParse(text);
+    if (asInt != null) {
+      final ms = asInt > 1000000000000 ? asInt : asInt * 1000;
+      return DateTime.fromMillisecondsSinceEpoch(ms);
+    }
+    return DateTime.tryParse(text);
+  }
+
+  String _messageSignature(Message message) {
+    final sec = message.createdAt.millisecondsSinceEpoch ~/ 1000;
+    return '${message.role.name}|$sec|${message.content.trim()}';
+  }
+
+  Future<void> _updateChatPreviewFromMessages(String chatId) async {
+    final index = _chats.indexWhere((c) => c.id == chatId);
+    if (index == -1) return;
+    if (_messages.isEmpty) return;
+
+    final last = _messages.last;
+    final preview = last.content.trim();
+    if (preview.isEmpty) return;
+
+    final chat = _chats[index];
+    chat.updatedAt = DateTime.now();
+    chat.lastMessagePreview =
+        preview.length > 60 ? '${preview.substring(0, 60)}…' : preview;
+    await _repo.updateChat(chat);
   }
 
   bool _isChatNotFoundError(CodingStreamEvent event) {
