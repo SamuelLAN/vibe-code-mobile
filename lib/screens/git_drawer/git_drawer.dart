@@ -71,10 +71,10 @@ class _GitDrawerState extends State<GitDrawer> {
   Future<void> _refreshSliderData({bool initial = false}) async {
     try {
       final results = await Future.wait<dynamic>([
-        _git.getSummary(),
-        _git.getRunStatus(),
-        _git.status(),
-        _git.getPushSummary(),
+        _git.getSummary(projectName: widget.projectName),
+        _git.getRunStatus(projectName: widget.projectName),
+        _git.status(projectName: widget.projectName),
+        _git.getPushSummary(projectName: widget.projectName),
       ]);
 
       if (!mounted) return;
@@ -279,7 +279,8 @@ class _GitDrawerState extends State<GitDrawer> {
                                 accentColor: GitColors.warning,
                                 onPress: () => _runProjectSseOperation(
                                   sheetTitle: 'build',
-                                  stream: _git.streamRunBuild(),
+                                  stream: _git.streamRunBuild(
+                                      projectName: widget.projectName),
                                   successStatus: ProjectOpStatus.idle,
                                   successFallback: 'Build completed',
                                   setStatus: (s) =>
@@ -294,7 +295,8 @@ class _GitDrawerState extends State<GitDrawer> {
                                 accentColor: GitColors.commit,
                                 onPress: () => _runProjectSseOperation(
                                   sheetTitle: 'install',
-                                  stream: _git.streamInstallDependencies(),
+                                  stream: _git.streamInstallDependencies(
+                                      projectName: widget.projectName),
                                   successStatus: ProjectOpStatus.idle,
                                   successFallback: 'Dependencies installed',
                                   setStatus: (s) =>
@@ -312,7 +314,8 @@ class _GitDrawerState extends State<GitDrawer> {
                                 isRunning: devRunning,
                                 onPress: () => _runProjectSseOperation(
                                   sheetTitle: 'run dev',
-                                  stream: _git.streamRunDev(),
+                                  stream: _git.streamRunDev(
+                                      projectName: widget.projectName),
                                   successStatus: ProjectOpStatus.running,
                                   successFallback: 'Development server started',
                                   setStatus: (s) =>
@@ -320,7 +323,8 @@ class _GitDrawerState extends State<GitDrawer> {
                                 ),
                                 onStop: () => _runProjectSseOperation(
                                   sheetTitle: 'stop dev',
-                                  stream: _git.streamStopDev(),
+                                  stream: _git.streamStopDev(
+                                      projectName: widget.projectName),
                                   successStatus: ProjectOpStatus.stopped,
                                   successFallback: 'Stopped dev service',
                                   setStatus: (s) =>
@@ -338,7 +342,8 @@ class _GitDrawerState extends State<GitDrawer> {
                                 isRunning: previewRunning,
                                 onPress: () => _runProjectSseOperation(
                                   sheetTitle: 'run preview',
-                                  stream: _git.streamRunPreview(),
+                                  stream: _git.streamRunPreview(
+                                      projectName: widget.projectName),
                                   successStatus: ProjectOpStatus.running,
                                   successFallback: 'Preview server started',
                                   setStatus: (s) =>
@@ -346,7 +351,8 @@ class _GitDrawerState extends State<GitDrawer> {
                                 ),
                                 onStop: () => _runProjectSseOperation(
                                   sheetTitle: 'stop preview',
-                                  stream: _git.streamStopPreview(),
+                                  stream: _git.streamStopPreview(
+                                      projectName: widget.projectName),
                                   successStatus: ProjectOpStatus.stopped,
                                   successFallback: 'Stopped preview service',
                                   setStatus: (s) =>
@@ -361,7 +367,8 @@ class _GitDrawerState extends State<GitDrawer> {
                                 accentColor: GitColors.error,
                                 onPress: () => _runProjectSseOperation(
                                   sheetTitle: 'stop dev',
-                                  stream: _git.streamStopDev(),
+                                  stream: _git.streamStopDev(
+                                      projectName: widget.projectName),
                                   successStatus: ProjectOpStatus.stopped,
                                   successFallback: 'Stopped dev service',
                                   setStatus: (s) =>
@@ -376,7 +383,8 @@ class _GitDrawerState extends State<GitDrawer> {
                                 accentColor: GitColors.error,
                                 onPress: () => _runProjectSseOperation(
                                   sheetTitle: 'stop preview',
-                                  stream: _git.streamStopPreview(),
+                                  stream: _git.streamStopPreview(
+                                      projectName: widget.projectName),
                                   successStatus: ProjectOpStatus.stopped,
                                   successFallback: 'Stopped preview service',
                                   setStatus: (s) =>
@@ -414,7 +422,8 @@ class _GitDrawerState extends State<GitDrawer> {
                                 accentColor: GitColors.pull,
                                 onPress: () => _runGitOperation(
                                   action: () => _git.pull(
-                                      branch: summary?.branch ?? 'main'),
+                                      branch: summary?.branch ?? 'main',
+                                      projectName: widget.projectName),
                                   currentStatus: _pullStatus,
                                   successFallback: 'Pull completed',
                                   setStatus: (s) =>
@@ -457,7 +466,8 @@ class _GitDrawerState extends State<GitDrawer> {
                                 status: _stashStatus,
                                 accentColor: GitColors.stash,
                                 onPress: () => _runGitOperation(
-                                  action: _git.stash,
+                                  action: () => _git.stash(
+                                      projectName: widget.projectName),
                                   currentStatus: _stashStatus,
                                   successFallback: 'Changes stashed',
                                   setStatus: (s) =>
@@ -471,7 +481,8 @@ class _GitDrawerState extends State<GitDrawer> {
                                 status: _stashPopStatus,
                                 accentColor: GitColors.stash,
                                 onPress: () => _runGitOperation(
-                                  action: _git.stashPop,
+                                  action: () => _git.stashPop(
+                                      projectName: widget.projectName),
                                   currentStatus: _stashPopStatus,
                                   successFallback: 'Changes restored',
                                   setStatus: (s) =>
@@ -981,7 +992,8 @@ class _GitDrawerState extends State<GitDrawer> {
     if (confirmed != true) return;
 
     setState(() => _worktreeActionLoading = true);
-    final result = await _git.discardAllChanges();
+    final result =
+        await _git.discardAllChanges(projectName: widget.projectName);
     if (!mounted) return;
     setState(() => _worktreeActionLoading = false);
     if (result.success) {
@@ -1007,7 +1019,10 @@ class _GitDrawerState extends State<GitDrawer> {
     if (confirmed != true) return;
 
     setState(() => _worktreeActionLoading = true);
-    final result = await _git.discardFileChanges(filePath: file.path);
+    final result = await _git.discardFileChanges(
+      filePath: file.path,
+      projectName: widget.projectName,
+    );
     if (!mounted) return;
     setState(() => _worktreeActionLoading = false);
     if (result.success) {
@@ -1024,7 +1039,10 @@ class _GitDrawerState extends State<GitDrawer> {
       BuildContext context, GitWorktreeFile file) async {
     try {
       setState(() => _worktreeActionLoading = true);
-      final diff = await _git.getFileDiff(filePath: file.path);
+      final diff = await _git.getFileDiff(
+        filePath: file.path,
+        projectName: widget.projectName,
+      );
       if (!mounted) return;
       setState(() => _worktreeActionLoading = false);
       if (!mounted) return;
@@ -1126,12 +1144,16 @@ class _GitDrawerState extends State<GitDrawer> {
         files: _worktree.files,
         onGenerateMessage: (filePaths) => _git.generateCommitMessage(
           filePaths: filePaths,
+          projectName: widget.projectName,
         ),
         onConfirm: (message, filePaths, addAll) async {
           Navigator.pop(context);
           await _runGitOperation(
             action: () => _git.commit(
-                message: message, filePaths: filePaths, addAll: addAll),
+                message: message,
+                filePaths: filePaths,
+                addAll: addAll,
+                projectName: widget.projectName),
             currentStatus: _commitStatus,
             successFallback: 'Commit successful',
             setStatus: (s) => setState(() => _commitStatus = s),
@@ -1144,7 +1166,8 @@ class _GitDrawerState extends State<GitDrawer> {
   Future<void> _showResetModal(BuildContext context) async {
     if (_resetCandidates.isEmpty) {
       try {
-        final candidates = await _git.getResetCandidates();
+        final candidates =
+            await _git.getResetCandidates(projectName: widget.projectName);
         if (!mounted) return;
         setState(() => _resetCandidates = candidates);
       } catch (e) {
@@ -1169,7 +1192,11 @@ class _GitDrawerState extends State<GitDrawer> {
           onConfirm: (commit, type) async {
             Navigator.pop(context);
             await _runGitOperation(
-              action: () => _git.reset(hash: commit.hash, mode: type),
+              action: () => _git.reset(
+                hash: commit.hash,
+                mode: type,
+                projectName: widget.projectName,
+              ),
               currentStatus: _resetStatus,
               successFallback: 'Reset to ${commit.shortHash}',
               setStatus: (s) => setState(() => _resetStatus = s),
@@ -1189,6 +1216,7 @@ class _GitDrawerState extends State<GitDrawer> {
       stream: _git.streamRunNpmCommand(
         command: input.command,
         timeoutSeconds: input.timeoutSeconds,
+        projectName: widget.projectName,
       ),
       successStatus: ProjectOpStatus.idle,
       successFallback: 'npm command completed',
@@ -1275,7 +1303,8 @@ class _GitDrawerState extends State<GitDrawer> {
 
   Future<void> _showPushModal(BuildContext context) async {
     try {
-      final preview = await _git.getPushSummary();
+      final preview =
+          await _git.getPushSummary(projectName: widget.projectName);
       if (!mounted) return;
       setState(() => _pushPreview = preview);
     } catch (e) {
@@ -1298,8 +1327,11 @@ class _GitDrawerState extends State<GitDrawer> {
         onConfirm: () async {
           Navigator.pop(context);
           await _runGitOperation(
-            action: () =>
-                _git.push(branch: preview.branch, remote: preview.remote),
+            action: () => _git.push(
+              branch: preview.branch,
+              remote: preview.remote,
+              projectName: widget.projectName,
+            ),
             currentStatus: _pushStatus,
             successFallback: 'Push completed',
             setStatus: (s) => setState(() => _pushStatus = s),
@@ -1311,7 +1343,7 @@ class _GitDrawerState extends State<GitDrawer> {
 
   Future<void> _showLogModal(BuildContext context) async {
     try {
-      final commits = await _git.log();
+      final commits = await _git.log(projectName: widget.projectName);
       if (!mounted) return;
       setState(() => _logCommits = commits);
     } catch (e) {
@@ -1335,7 +1367,8 @@ class _GitDrawerState extends State<GitDrawer> {
 
   Future<void> _showBranchModal(BuildContext context) async {
     try {
-      final branches = await _git.getBranchRefs();
+      final branches =
+          await _git.getBranchRefs(projectName: widget.projectName);
       if (!mounted) return;
       setState(() => _branches = branches);
     } catch (e) {
@@ -1356,7 +1389,10 @@ class _GitDrawerState extends State<GitDrawer> {
         onCheckout: (branch) async {
           Navigator.pop(context);
           await _runGitOperation(
-            action: () => _git.checkout(branch: branch.fullName),
+            action: () => _git.checkout(
+              branch: branch.fullName,
+              projectName: widget.projectName,
+            ),
             currentStatus: GitOpStatus.idle,
             successFallback:
                 'Switched to branch ${branch.isRemote ? branch.fullName : branch.name}',
@@ -1370,6 +1406,7 @@ class _GitDrawerState extends State<GitDrawer> {
               branch: newBranchName,
               createBranch: true,
               startPoint: fromBranch.fullName,
+              projectName: widget.projectName,
             ),
             currentStatus: GitOpStatus.idle,
             successFallback: 'Created and switched to branch $newBranchName',

@@ -38,8 +38,14 @@ class GitService extends ChangeNotifier {
     return _defaultProjectName;
   }
 
-  Future<GitSummary> getSummary() async {
-    final response = await _get('/vibe/git/summary');
+  Future<GitSummary> getSummary({
+    String? projectName,
+  }) async {
+    final effectiveProjectName = await _effectiveProjectName(projectName);
+    final response = await _get(
+      '/vibe/git/summary',
+      query: {'project_name': effectiveProjectName},
+    );
     if (!response.success) throw Exception(response.message);
     final data = _payloadAsMap(response.details);
     return GitSummary(
