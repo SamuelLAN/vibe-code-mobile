@@ -624,7 +624,10 @@ class _ChatScreenState extends State<ChatScreen> {
                 onChanged: (value) async {
                   if (value == null) return;
                   if (value == _addProjectValue) {
-                    await _showAddProjectSheet();
+                    WidgetsBinding.instance.addPostFrameCallback((_) {
+                      if (!mounted) return;
+                      _showAddProjectSheet();
+                    });
                     return;
                   }
                   await _selectProject(value);

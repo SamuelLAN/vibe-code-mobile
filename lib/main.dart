@@ -101,6 +101,7 @@ class AuthGate extends StatefulWidget {
 class _AuthGateState extends State<AuthGate> with WidgetsBindingObserver {
   bool _authReady = false;
   bool _chatReady = false;
+  bool _gitReady = false;
   String _bootstrapStep = 'Preparing startup...';
 
   @override
@@ -132,17 +133,27 @@ class _AuthGateState extends State<AuthGate> with WidgetsBindingObserver {
     _logStep('App started, preparing initialization');
     final auth = context.read<AuthService>();
     final chatService = context.read<ChatService>();
+    final gitService = context.read<GitService>();
+    var authReady = false;
+    var chatReady = false;
+    var gitReady = false;
 
     try {
       _setBootstrapStep('Initializing auth service...');
       _logStep('Starting auth service initialization');
       await auth.tryAutoLogin();
       _logStep('Auth service initialized');
+      authReady = true;
 
-      _setBootstrapStep('Initializing chat service...');
-      _logStep('Starting chat service initialization');
-      await chatService.initialize();
-      _logStep('Chat service initialized');
+      _setBootstrapStep('Initializing chat and git services...');
+      _logStep('Starting chat and git service initialization');
+      await Future.wait([
+        chatService.initialize(),
+        gitService.initialize(),
+      ]);
+      _logStep('Chat and git services initialized');
+      chatReady = true;
+      gitReady = true;
 
       _setBootstrapStep('Initialization complete');
       _logStep('App initialization complete');
@@ -153,8 +164,9 @@ class _AuthGateState extends State<AuthGate> with WidgetsBindingObserver {
     } finally {
       if (!mounted) return;
       setState(() {
-        _authReady = true;
-        _chatReady = true;
+        _authReady = authReady;
+        _chatReady = chatReady;
+        _gitReady = gitReady;
       });
     }
   }
@@ -176,7 +188,7 @@ class _AuthGateState extends State<AuthGate> with WidgetsBindingObserver {
     final auth = context.watch<AuthService>();
 
     // 显示骨架屏直到服务准备就绪
-    if (!_authReady || !_chatReady) {
+    if (!_authReady || !_chatReady || !_gitReady) {
       return Scaffold(
         backgroundColor: Theme.of(context).scaffoldBackgroundColor,
         body: Center(

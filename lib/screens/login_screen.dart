@@ -3,7 +3,6 @@ import 'package:provider/provider.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../services/auth_service.dart';
-import '../services/settings_service.dart';
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
@@ -28,16 +27,11 @@ class _LoginScreenState extends State<LoginScreen> {
   Future<void> _submit() async {
     if (!_formKey.currentState!.validate()) return;
     final auth = context.read<AuthService>();
-    final settings = context.read<SettingsService>();
     final success = await auth.login(
       email: _emailController.text.trim(),
       password: _passwordController.text,
     );
     if (success) {
-      final token = auth.accessToken;
-      if (token != null && token.isNotEmpty) {
-        await settings.setGitToken(token);
-      }
       return;
     }
     if (!success && mounted) {
@@ -78,6 +72,21 @@ class _LoginScreenState extends State<LoginScreen> {
         ),
       );
     }
+  }
+
+  Future<void> _submitGoogle() async {
+    final auth = context.read<AuthService>();
+    final success = await auth.loginWithGoogle();
+    if (success) return;
+
+    if (!mounted) return;
+    final error = auth.error ?? 'Google SSO failed';
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(error),
+        backgroundColor: Theme.of(context).colorScheme.error,
+      ),
+    );
   }
 
   @override
@@ -145,6 +154,24 @@ class _LoginScreenState extends State<LoginScreen> {
                           ],
                         ),
                         const SizedBox(height: 32),
+                        OutlinedButton(
+                          onPressed: auth.isLoading ? null : _submitGoogle,
+                          style: OutlinedButton.styleFrom(
+                            padding: const EdgeInsets.symmetric(vertical: 14),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(14),
+                            ),
+                          ),
+                          child: auth.isLoading
+                              ? const SizedBox(
+                                  width: 20,
+                                  height: 20,
+                                  child:
+                                      CircularProgressIndicator(strokeWidth: 2),
+                                )
+                              : const Text('Continue with Google'),
+                        ),
+                        const SizedBox(height: 16),
                         TextFormField(
                           controller: _emailController,
                           textInputAction: TextInputAction.next,

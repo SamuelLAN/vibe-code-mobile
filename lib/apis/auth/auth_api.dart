@@ -52,6 +52,71 @@ class LoginResponse {
   }
 }
 
+/// Google OAuth 授权请求体
+class GoogleAuthorizeRequest {
+  final String state;
+
+  GoogleAuthorizeRequest({required this.state});
+
+  Map<String, dynamic> toJson() => {'state': state};
+}
+
+/// Google OAuth 授权响应
+class GoogleAuthorizeResponse {
+  final String authorizationEndpoint;
+  final String clientId;
+  final String responseType;
+  final String scope;
+  final String state;
+
+  GoogleAuthorizeResponse({
+    required this.authorizationEndpoint,
+    required this.clientId,
+    required this.responseType,
+    required this.scope,
+    required this.state,
+  });
+
+  factory GoogleAuthorizeResponse.fromJson(Map<String, dynamic> json) {
+    final data = json['data'] as Map<String, dynamic>;
+    return GoogleAuthorizeResponse(
+      authorizationEndpoint: data['authorization_endpoint'] as String,
+      clientId: data['client_id'] as String,
+      responseType: data['response_type'] as String,
+      scope: data['scope'] as String,
+      state: data['state'] as String,
+    );
+  }
+}
+
+/// Google OAuth 回调请求体
+class GoogleCallbackRequest {
+  final String code;
+  final String codeVerifier;
+  final String redirectUrl;
+  final String state;
+  final String? deviceId;
+
+  GoogleCallbackRequest({
+    required this.code,
+    required this.codeVerifier,
+    required this.redirectUrl,
+    required this.state,
+    this.deviceId,
+  });
+
+  Map<String, dynamic> toJson() {
+    final map = <String, dynamic>{
+      'code': code,
+      'code_verifier': codeVerifier,
+      'redirect_url': redirectUrl,
+      'state': state,
+    };
+    if (deviceId != null) map['device_id'] = deviceId;
+    return map;
+  }
+}
+
 /// Token 刷新请求体
 class RefreshTokenRequest {
   final String refreshToken;
@@ -191,6 +256,41 @@ class AuthApiClient {
     if (response.statusCode != 200) {
       throw ApiException.fromResponse(response);
     }
+  }
+
+  Future<GoogleAuthorizeResponse> googleAuthorize(
+      GoogleAuthorizeRequest request) async {
+    final url = '$_baseUrl/auth/google/authorize';
+
+    final response = await _client.post(
+      Uri.parse(url),
+      headers: {'Content-Type': 'application/json'},
+      body: jsonEncode(request.toJson()),
+    );
+
+    if (response.statusCode == 200) {
+      return GoogleAuthorizeResponse.fromJson(
+        jsonDecode(response.body) as Map<String, dynamic>,
+      );
+    }
+    throw ApiException.fromResponse(response);
+  }
+
+  Future<LoginResponse> googleCallback(GoogleCallbackRequest request) async {
+    final url = '$_baseUrl/auth/google/callback';
+
+    final response = await _client.post(
+      Uri.parse(url),
+      headers: {'Content-Type': 'application/json'},
+      body: jsonEncode(request.toJson()),
+    );
+
+    if (response.statusCode == 200) {
+      return LoginResponse.fromJson(
+        jsonDecode(response.body) as Map<String, dynamic>,
+      );
+    }
+    throw ApiException.fromResponse(response);
   }
 
   Future<RefreshTokenResponse> refreshToken(RefreshTokenRequest request) async {

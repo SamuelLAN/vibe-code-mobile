@@ -1069,18 +1069,9 @@ class _FunctionTimelineBlockState extends State<_FunctionTimelineBlock> {
     final roots = _extractCodingMindMapRoots(args);
     if (roots.isEmpty) return null;
 
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.all(10),
-      decoration: BoxDecoration(
-        color: isDark ? Colors.black.withValues(alpha: 0.22) : Colors.white,
-        borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: Colors.blueGrey.withValues(alpha: 0.2)),
-      ),
-      child: _CodingMindMapTreeCard(
-        roots: roots,
-        isDark: isDark,
-      ),
+    return _CodingMindMapTreeCard(
+      roots: roots,
+      isDark: isDark,
     );
   }
 
@@ -2061,20 +2052,16 @@ class _CodingMindMapTreeCard extends StatelessWidget {
   final List<_CodingMindMapNodeItem> roots;
   final bool isDark;
 
-  /// åºå®é«åº¦å¸¸é
-  static const double fixedHeight = 280;
-
   @override
   Widget build(BuildContext context) {
     return Container(
-      height: fixedHeight,
+      width: double.infinity,
+      padding: const EdgeInsets.fromLTRB(10, 8, 10, 8),
       decoration: BoxDecoration(
-        color: isDark
-            ? Colors.white.withValues(alpha: 0.035)
-            : Colors.blueGrey.withValues(alpha: 0.05),
+        color: Colors.white,
         borderRadius: BorderRadius.circular(14),
         border: Border.all(
-          color: Colors.white.withValues(alpha: isDark ? 0.14 : 0.2),
+          color: Colors.blueGrey.withValues(alpha: 0.2),
         ),
         boxShadow: [
           BoxShadow(
@@ -2084,30 +2071,24 @@ class _CodingMindMapTreeCard extends StatelessWidget {
           ),
         ],
       ),
-      child: ClipRRect(
-        borderRadius: BorderRadius.circular(14),
-        child: SingleChildScrollView(
-          padding: const EdgeInsets.fromLTRB(10, 8, 10, 8),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              for (var i = 0; i < roots.length; i++) ...[
-                _CodingMindMapNodeTile(
-                  node: roots[i],
-                  isDark: isDark,
-                  depth: 0,
-                  accentIndex: i,
-                  defaultOpen: true,
-                ),
-                if (i != roots.length - 1)
-                  Divider(
-                    height: 6,
-                    color: Colors.white.withValues(alpha: isDark ? 0.05 : 0.1),
-                  ),
-              ],
-            ],
-          ),
-        ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          for (var i = 0; i < roots.length; i++) ...[
+            _CodingMindMapNodeTile(
+              node: roots[i],
+              isDark: isDark,
+              depth: 0,
+              accentIndex: i,
+              defaultOpen: true,
+            ),
+            if (i != roots.length - 1)
+              Divider(
+                height: 6,
+                color: Colors.blueGrey.withValues(alpha: isDark ? 0.08 : 0.1),
+              ),
+          ],
+        ],
       ),
     );
   }

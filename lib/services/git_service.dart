@@ -19,9 +19,34 @@ class GitService extends ChangeNotifier {
 
   final SettingsService _settings;
   final AuthService? _authService;
+  Future<void>? _initializingFuture;
+  bool _isInitialized = false;
 
   bool _busy = false;
   bool get isBusy => _busy;
+
+  Future<void> initialize() async {
+    if (_isInitialized) return;
+    if (_initializingFuture != null) {
+      await _initializingFuture;
+      return;
+    }
+
+    _initializingFuture = () async {
+      await Future.wait([
+        _settings.getGitBaseUrl(),
+        _settings.getGitRepoPath(),
+        _effectiveProjectName(null),
+      ]);
+      _isInitialized = true;
+    }();
+
+    try {
+      await _initializingFuture;
+    } finally {
+      _initializingFuture = null;
+    }
+  }
 
   void _log(String message) {
     debugPrint('[GitService] $message');
@@ -683,10 +708,10 @@ class GitService extends ChangeNotifier {
     required Map<String, dynamic> body,
     String? projectName,
   }) async* {
+    await initialize();
     final baseUrl = await _settings.getGitBaseUrl();
     final repoPath = await _settings.getGitRepoPath();
-    final token =
-        await _authService?.getValidToken() ?? await _settings.getGitToken();
+    final token = await _authService?.getValidToken();
     final effectiveProjectName = await _effectiveProjectName(projectName);
     final requestBody = <String, dynamic>{
       ...body,
@@ -701,6 +726,15 @@ class GitService extends ChangeNotifier {
       );
       return;
     }
+    if (token == null || token.isEmpty) {
+      yield GitSseEvent(
+        name: 'error',
+        rawData: '{"msg":"Authentication required."}',
+        data: {'msg': 'Authentication required. Please log in again.'},
+      );
+      return;
+    }
+    final accessToken = token;
 
     final uri = Uri.parse('$baseUrl$path').replace(
       queryParameters: {
@@ -712,9 +746,7 @@ class GitService extends ChangeNotifier {
       ..headers['Content-Type'] = 'application/json'
       ..headers['Accept'] = 'text/event-stream'
       ..body = jsonEncode(requestBody);
-    if (token != null && token.isNotEmpty) {
-      request.headers['Authorization'] = 'Bearer $token';
-    }
+    request.headers['Authorization'] = 'Bearer $accessToken';
 
     _log('POST $path [SSE] start body=${jsonEncode(requestBody)}');
     _busy = true;
@@ -803,10 +835,10 @@ class GitService extends ChangeNotifier {
     Map<String, String>? query,
     Map<String, dynamic>? body,
   }) async {
+    await initialize();
     final baseUrl = await _settings.getGitBaseUrl();
     final repoPath = await _settings.getGitRepoPath();
-    final token =
-        await _authService?.getValidToken() ?? await _settings.getGitToken();
+    final token = await _authService?.getValidToken();
     final startedAt = DateTime.now();
 
     if (baseUrl == null || baseUrl.isEmpty) {
@@ -817,6 +849,14 @@ class GitService extends ChangeNotifier {
         details: 'Set Git base URL in settings.',
       );
     }
+    if (token == null || token.isEmpty) {
+      _log('$method $path blocked: auth token missing');
+      return GitOperationResult(
+        success: false,
+        message: 'Authentication required. Please log in again.',
+      );
+    }
+    final accessToken = token;
 
     final queryMap = <String, String>{
       ...?query,
@@ -828,7 +868,7 @@ class GitService extends ChangeNotifier {
       '$method $path start '
       'query=${queryMap.isEmpty ? '{}' : jsonEncode(queryMap)} '
       'body=${method == 'POST' ? jsonEncode(requestBody) : '{}'} '
-      'auth=${(token != null && token.isNotEmpty) ? 'Bearer' : 'none'}',
+      'auth=Bearer',
     );
 
     _busy = true;
@@ -842,18 +882,14 @@ class GitService extends ChangeNotifier {
       if (method == 'GET') {
         response = await http.get(
           uri,
-          headers: {
-            if (token != null && token.isNotEmpty)
-              'Authorization': 'Bearer $token',
-          },
+          headers: {'Authorization': 'Bearer $accessToken'},
         );
       } else {
         response = await http.post(
           uri,
           headers: {
             'Content-Type': 'application/json',
-            if (token != null && token.isNotEmpty)
-              'Authorization': 'Bearer $token',
+            'Authorization': 'Bearer $accessToken',
           },
           body: jsonEncode(requestBody),
         );

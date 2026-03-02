@@ -17,6 +17,17 @@ import 'settings_service.dart';
 import 'stream_buffer_processor.dart';
 
 class ChatService extends ChangeNotifier {
+  static const Set<String> _unifiedReplayMessageTypes = <String>{
+    'text',
+    'thinking',
+    'function_call',
+    'function_result',
+    'insight_start',
+    'insight_end',
+    'edge',
+    'user_message',
+  };
+
   ChatService({
     ChatRepository? repository,
     AuthService? authService,
@@ -1186,6 +1197,8 @@ class ChatService extends ChangeNotifier {
   }) {
     final messages = <Message>[];
     final assistantBuffer = StringBuffer();
+    var assistantProcessor = StreamBufferProcessor();
+    final assistantElements = <StreamElement>[];
     final fallbackCreatedAt = _createdAtFromFlowId(flowId) ?? DateTime.now();
     DateTime? assistantCreatedAt;
     var fallbackTick = 0;
@@ -1196,42 +1209,18 @@ class ChatService extends ChangeNotifier {
       return value;
     }
 
-    for (final event in events) {
-      final extracted = _extractStructuredMessagesFromEvent(
-        chatId: chatId,
-        event: event,
-        fallbackCreatedAt: nextFallbackCreatedAt(),
-      );
-      if (extracted.isNotEmpty) {
-        if (assistantBuffer.isNotEmpty) {
-          messages.add(
-            Message(
-              id: _uuid.v4(),
-              chatId: chatId,
-              role: MessageRole.assistant,
-              content: assistantBuffer.toString(),
-              createdAt: assistantCreatedAt ?? nextFallbackCreatedAt(),
-              attachments: [],
-              isStreaming: false,
-            ),
-          );
-          assistantBuffer.clear();
-          assistantCreatedAt = null;
-        }
-        messages.addAll(extracted);
-        continue;
-      }
-
-      if (event.type != CodingStreamEventType.message) {
-        continue;
-      }
-      final text = (event.text ?? '').trim();
-      if (text.isEmpty) continue;
+    void appendAssistantChunk(String chunk) {
+      if (chunk.isEmpty) return;
       assistantCreatedAt ??= nextFallbackCreatedAt();
-      assistantBuffer.write(text);
+      assistantBuffer.write(chunk);
+      final newElements = assistantProcessor.processChunk(chunk);
+      for (final element in newElements) {
+        _mergeStreamElement(assistantElements, element);
+      }
     }
 
-    if (assistantBuffer.isNotEmpty) {
+    void flushAssistantIfNeeded() {
+      if (assistantBuffer.isEmpty) return;
       messages.add(
         Message(
           id: _uuid.v4(),
@@ -1241,11 +1230,188 @@ class ChatService extends ChangeNotifier {
           createdAt: assistantCreatedAt ?? nextFallbackCreatedAt(),
           attachments: [],
           isStreaming: false,
+          streamElements: List<StreamElement>.from(assistantElements),
+        ),
+      );
+      assistantBuffer.clear();
+      assistantElements.clear();
+      assistantProcessor = StreamBufferProcessor();
+      assistantCreatedAt = null;
+    }
+
+    void appendUserMessage(String text) {
+      final trimmed = text.trim();
+      if (trimmed.isEmpty) return;
+      flushAssistantIfNeeded();
+      messages.add(
+        Message(
+          id: _uuid.v4(),
+          chatId: chatId,
+          role: MessageRole.user,
+          content: trimmed,
+          createdAt: nextFallbackCreatedAt(),
+          attachments: [],
+          isStreaming: false,
         ),
       );
     }
 
+    for (final event in events) {
+      final envelope = _extractUnifiedReplayEnvelope(event);
+      if (envelope != null) {
+        if (envelope.msgType == 'insight_start') {
+          final title = _extractInsightStartTitle(envelope.data);
+          if (title != null) {
+            appendUserMessage(title);
+            continue;
+          }
+        }
+
+        if (envelope.msgType == 'user_message') {
+          appendUserMessage(
+            _extractInsightStartTitle(envelope.data) ?? envelope.data,
+          );
+          continue;
+        }
+
+        final segments = _splitReplaySegmentsByInsightTitle(envelope.data);
+        if (segments.isEmpty) {
+          continue;
+        }
+        for (final segment in segments) {
+          if (segment.isUser) {
+            appendUserMessage(segment.text);
+          } else {
+            appendAssistantChunk(segment.text);
+          }
+        }
+        continue;
+      }
+
+      final extracted = _extractStructuredMessagesFromEvent(
+        chatId: chatId,
+        event: event,
+        fallbackCreatedAt: nextFallbackCreatedAt(),
+      );
+      if (extracted.isNotEmpty) {
+        flushAssistantIfNeeded();
+        messages.addAll(extracted);
+        continue;
+      }
+
+      if (event.type != CodingStreamEventType.message) {
+        continue;
+      }
+      final text = event.text ?? '';
+      if (text.isEmpty) continue;
+      appendAssistantChunk(text);
+    }
+
+    flushAssistantIfNeeded();
+
     return messages;
+  }
+
+  _UnifiedReplayEnvelope? _extractUnifiedReplayEnvelope(
+      CodingStreamEvent event) {
+    if (event.type != CodingStreamEventType.message) return null;
+    final rawData = event.rawData;
+    if (rawData == null || rawData.isEmpty) return null;
+    try {
+      final decoded = jsonDecode(rawData);
+      if (decoded is! Map) return null;
+      final map = Map<String, dynamic>.from(decoded);
+      final msgType = map['msg']?.toString().trim().toLowerCase();
+      if (msgType == null || !_unifiedReplayMessageTypes.contains(msgType)) {
+        return null;
+      }
+      final payload = map['data'];
+      final text = payload is String ? payload : _flattenContentValue(payload);
+      if (text.isEmpty) return null;
+      return _UnifiedReplayEnvelope(msgType: msgType, data: text);
+    } catch (_) {
+      return null;
+    }
+  }
+
+  List<_ReplaySegment> _splitReplaySegmentsByInsightTitle(String chunk) {
+    if (chunk.isEmpty) return const <_ReplaySegment>[];
+
+    final segments = <_ReplaySegment>[];
+    final insightPattern = RegExp(r'```insight_start\s*\n([\s\S]*?)```');
+    var cursor = 0;
+
+    for (final match in insightPattern.allMatches(chunk)) {
+      if (match.start > cursor) {
+        segments.add(_ReplaySegment(
+          text: chunk.substring(cursor, match.start),
+          isUser: false,
+        ));
+      }
+
+      final block = match.group(0) ?? '';
+      final body = (match.group(1) ?? '').trim();
+      String? title;
+      try {
+        final parsed = jsonDecode(body);
+        if (parsed is Map<String, dynamic>) {
+          final rawTitle = parsed['title'];
+          if (rawTitle is String && rawTitle.trim().isNotEmpty) {
+            title = rawTitle.trim();
+          }
+        }
+      } catch (_) {}
+
+      if (title != null && title.trim().isNotEmpty) {
+        segments.add(_ReplaySegment(text: title, isUser: true));
+      } else if (block.isNotEmpty) {
+        segments.add(_ReplaySegment(text: block, isUser: false));
+      }
+      cursor = match.end;
+    }
+
+    if (cursor < chunk.length) {
+      segments.add(_ReplaySegment(
+        text: chunk.substring(cursor),
+        isUser: false,
+      ));
+    }
+
+    return segments.where((segment) => segment.text.isNotEmpty).toList();
+  }
+
+  String? _extractInsightStartTitle(String raw) {
+    final trimmed = raw.trim();
+    if (trimmed.isEmpty) return null;
+
+    Map<String, dynamic>? parsedMap;
+
+    try {
+      final parsed = jsonDecode(trimmed);
+      if (parsed is Map<String, dynamic>) {
+        parsedMap = parsed;
+      }
+    } catch (_) {}
+
+    if (parsedMap == null) {
+      final fencePattern = RegExp(r'^```insight_start\s*\n([\s\S]*?)```$');
+      final match = fencePattern.firstMatch(trimmed);
+      if (match != null) {
+        final body = (match.group(1) ?? '').trim();
+        try {
+          final parsed = jsonDecode(body);
+          if (parsed is Map<String, dynamic>) {
+            parsedMap = parsed;
+          }
+        } catch (_) {}
+      }
+    }
+
+    final title = parsedMap?['title'];
+    if (title is String && title.trim().isNotEmpty) {
+      return title.trim();
+    }
+    return null;
   }
 
   List<Message> _extractStructuredMessagesFromEvent({
@@ -1505,4 +1671,24 @@ enum _GenerationResult {
   success,
   chatMissing,
   failed,
+}
+
+class _UnifiedReplayEnvelope {
+  const _UnifiedReplayEnvelope({
+    required this.msgType,
+    required this.data,
+  });
+
+  final String msgType;
+  final String data;
+}
+
+class _ReplaySegment {
+  const _ReplaySegment({
+    required this.text,
+    required this.isUser,
+  });
+
+  final String text;
+  final bool isUser;
 }

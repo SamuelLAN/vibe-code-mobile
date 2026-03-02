@@ -60,6 +60,17 @@ class CodingStreamEvent {
 typedef CodingStreamListener = void Function(CodingStreamEvent event);
 
 class CodingStreamApiClient {
+  static const Set<String> _unifiedMessageTypes = <String>{
+    'text',
+    'thinking',
+    'function_call',
+    'function_result',
+    'insight_start',
+    'insight_end',
+    'edge',
+    'user_message',
+  };
+
   CodingStreamApiClient({http.Client? client})
       : _client = client ?? http.Client();
 
@@ -336,15 +347,26 @@ class CodingStreamApiClient {
                       as String?
                   : null);
 
-          final directText = decoded['message'] ??
-              decoded['msg'] ??
-              decoded['content'] ??
-              decoded['text'];
-          if (directText is String) {
+          final data = decoded['data'];
+          final msgType = decoded['msg']?.toString().trim().toLowerCase();
+          final isUnifiedMessage = msgType != null &&
+              _unifiedMessageTypes.contains(msgType) &&
+              eventName == 'message';
+
+          if (isUnifiedMessage) {
+            if (data is String) {
+              text = data;
+            } else if (data != null) {
+              text = jsonEncode(data);
+            }
+          }
+
+          final directText =
+              decoded['message'] ?? decoded['content'] ?? decoded['text'];
+          if (text == null && directText is String) {
             text = directText;
           }
 
-          final data = decoded['data'];
           if (text == null && data is String) {
             text = data;
           } else if (text == null && data is Map<String, dynamic>) {
@@ -358,7 +380,8 @@ class CodingStreamApiClient {
             flowId ??= data['flow_id'] as String?;
           }
 
-          final errText = decoded['error'] ?? decoded['msg'];
+          final errText = decoded['error'] ??
+              (eventName == 'error' ? decoded['msg'] : null);
           if (errText is String) {
             error = errText;
           }

@@ -1,4 +1,8 @@
+import 'dart:convert';
+
+import 'package:crypto/crypto.dart';
 import 'package:flutter/foundation.dart';
+import 'package:flutter_web_auth_2/flutter_web_auth_2.dart';
 import 'package:uuid/uuid.dart';
 
 import '../apis/auth/auth_api.dart';
@@ -14,10 +18,12 @@ class AuthService extends ChangeNotifier {
         _apiClient = apiClient ?? AuthApiClient();
 
   static const _deviceIdKey = 'device_id';
+  static const _googleCallbackUrl = 'plutuxcode://auth/google/callback';
 
   final KeyValueStore _store;
   final AuthApiClient _apiClient;
   late final TokenManager _tokenManager;
+  Future<void>? _initializingFuture;
 
   bool _isInitialized = false;
   bool _isAuthenticated = false;
@@ -39,16 +45,28 @@ class AuthService extends ChangeNotifier {
 
   Future<void> _initialize() async {
     if (_isInitialized) return;
+    if (_initializingFuture != null) {
+      await _initializingFuture;
+      return;
+    }
 
-    _tokenManager = TokenManager(
-      apiClient: _apiClient,
-      store: _store,
-    );
-    await _tokenManager.initialize();
-    _tokenManager.addListener(_syncAuthStateFromTokenManager);
+    _initializingFuture = () async {
+      _tokenManager = TokenManager(
+        apiClient: _apiClient,
+        store: _store,
+      );
+      await _tokenManager.initialize();
+      _tokenManager.addListener(_syncAuthStateFromTokenManager);
 
-    _isAuthenticated = _tokenManager.hasValidToken;
-    _isInitialized = true;
+      _isAuthenticated = _tokenManager.hasValidToken;
+      _isInitialized = true;
+    }();
+
+    try {
+      await _initializingFuture;
+    } finally {
+      _initializingFuture = null;
+    }
   }
 
   Future<void> tryAutoLogin() async {
@@ -128,6 +146,101 @@ class AuthService extends ChangeNotifier {
         _error = 'Network error: $e';
       }
 
+      notifyListeners();
+      return false;
+    }
+  }
+
+  Future<bool> loginWithGoogle() async {
+    await _initialize();
+
+    _isLoading = true;
+    _error = null;
+    notifyListeners();
+
+    try {
+      final state = const Uuid().v4();
+      final codeVerifier =
+          '${const Uuid().v4()}${const Uuid().v4()}'.replaceAll('-', '');
+      final codeChallenge =
+          base64UrlEncode(sha256.convert(utf8.encode(codeVerifier)).bytes)
+              .replaceAll('=', '');
+      final deviceId = await _getDeviceId();
+
+      final authorize = await _apiClient.googleAuthorize(
+        GoogleAuthorizeRequest(state: state),
+      );
+
+      final authUrl = Uri.parse(authorize.authorizationEndpoint).replace(
+        queryParameters: {
+          'client_id': authorize.clientId,
+          'response_type': authorize.responseType,
+          'scope': authorize.scope,
+          'state': authorize.state,
+          'redirect_uri': _googleCallbackUrl,
+          'code_challenge': codeChallenge,
+          'code_challenge_method': 'S256',
+        },
+      );
+
+      final callbackResult = await FlutterWebAuth2.authenticate(
+        url: authUrl.toString(),
+        callbackUrlScheme: Uri.parse(_googleCallbackUrl).scheme,
+      );
+
+      final callbackUri = Uri.parse(callbackResult);
+      final code = callbackUri.queryParameters['code'];
+      final callbackState = callbackUri.queryParameters['state'];
+      final expectedState = authorize.state;
+
+      if (code == null || code.isEmpty) {
+        _error = 'Google authorization failed: code missing';
+        _isLoading = false;
+        notifyListeners();
+        return false;
+      }
+
+      if (callbackState == null || callbackState != expectedState) {
+        _error = 'Google authorization failed: invalid state';
+        _isLoading = false;
+        notifyListeners();
+        return false;
+      }
+
+      final response = await _apiClient.googleCallback(
+        GoogleCallbackRequest(
+          code: code,
+          codeVerifier: codeVerifier,
+          redirectUrl: _googleCallbackUrl,
+          state: callbackState,
+          deviceId: deviceId,
+        ),
+      );
+
+      await _tokenManager.setTokens(
+        accessToken: response.accessToken,
+        refreshToken: response.refreshToken,
+        expiresIn: response.expiresIn,
+      );
+
+      _isAuthenticated = true;
+      _isLoading = false;
+      notifyListeners();
+      return true;
+    } on ApiException catch (e) {
+      _isLoading = false;
+
+      if (e.isForbidden) {
+        _error = 'Account has been disabled';
+      } else {
+        _error = e.message;
+      }
+
+      notifyListeners();
+      return false;
+    } catch (e) {
+      _isLoading = false;
+      _error = 'Google SSO failed: $e';
       notifyListeners();
       return false;
     }

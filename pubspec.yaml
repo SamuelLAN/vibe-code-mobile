@@ -24,6 +24,8 @@ dependencies:
   url_launcher: ^6.3.0
   record: ^6.2.0
   just_audio: ^0.9.40
+  flutter_web_auth_2: ^4.1.0
+  crypto: ^3.0.6
 
 flutter:
   uses-material-design: true
