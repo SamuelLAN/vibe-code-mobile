@@ -210,7 +210,7 @@ class _CollapsibleUserTextState extends State<_CollapsibleUserText> {
               GestureDetector(
                 onTap: () => setState(() => _expanded = !_expanded),
                 child: Text(
-                  _expanded ? '收起' : '展开',
+                  _expanded ? 'Collapse' : 'Expand',
                   style: Theme.of(context).textTheme.labelMedium?.copyWith(
                         color: Theme.of(context).colorScheme.primary,
                         fontWeight: FontWeight.w600,
@@ -1617,7 +1617,7 @@ class _FunctionTimelineBlockState extends State<_FunctionTimelineBlock> {
       final first = results.first;
       final basename = p.basename(first.path);
       if (first.success == true) {
-        return '☑️ 语法检测通过：$basename';
+        return '☑️ Syntax check passed: $basename';
       }
       if (first.success == false) {
         final reason = _extractLinterFailureExcerpt(first.output);
@@ -4331,7 +4331,7 @@ class _VoiceMessageWidgetState extends State<_VoiceMessageWidget> {
         children: [
           const Icon(Icons.volume_up, size: 16),
           const SizedBox(width: 4),
-          Text('播放中...', style: textStyle),
+          Text('Playing...', style: textStyle),
         ],
       );
     }
@@ -4349,7 +4349,7 @@ class _VoiceMessageWidgetState extends State<_VoiceMessageWidget> {
               ),
             ),
             const SizedBox(width: 6),
-            Text('转录中...', style: textStyle),
+            Text('Transcribing...', style: textStyle),
           ],
         );
       case TranscriptionStatus.completed:
@@ -4359,7 +4359,7 @@ class _VoiceMessageWidgetState extends State<_VoiceMessageWidget> {
             const SizedBox(width: 4),
             Expanded(
               child: Text(
-                widget.attachment.transcribedText ?? '转录完成',
+                widget.attachment.transcribedText ?? 'Transcription complete',
                 style: textStyle,
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
@@ -4374,7 +4374,7 @@ class _VoiceMessageWidgetState extends State<_VoiceMessageWidget> {
             const SizedBox(width: 4),
             Expanded(
               child: Text(
-                '转录失败',
+                'Transcription failed',
                 style: textStyle.copyWith(color: Colors.red),
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
@@ -4391,7 +4391,7 @@ class _VoiceMessageWidgetState extends State<_VoiceMessageWidget> {
               const SizedBox(width: 4),
               Expanded(
                 child: Text(
-                  '点击播放',
+                  'Tap to play',
                   style: textStyle,
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
@@ -4400,7 +4400,7 @@ class _VoiceMessageWidgetState extends State<_VoiceMessageWidget> {
             ],
           );
         }
-        return Text('语音消息', style: textStyle);
+        return Text('Voice message', style: textStyle);
     }
   }
 

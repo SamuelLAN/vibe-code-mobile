@@ -11,7 +11,8 @@ class LogModal extends StatefulWidget {
   State<LogModal> createState() => _LogModalState();
 }
 
-class _LogModalState extends State<LogModal> with SingleTickerProviderStateMixin {
+class _LogModalState extends State<LogModal>
+    with SingleTickerProviderStateMixin {
   late final AnimationController _controller;
   late final Animation<Offset> _slideAnimation;
   late final Animation<double> _fadeAnimation;
@@ -77,7 +78,7 @@ class _LogModalState extends State<LogModal> with SingleTickerProviderStateMixin
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
                     Text(
-                      '提交日志',
+                      'Commit log',
                       style: TextStyle(
                         fontSize: 18,
                         fontWeight: FontWeight.w700,
@@ -94,7 +95,8 @@ class _LogModalState extends State<LogModal> with SingleTickerProviderStateMixin
               if (commits.isEmpty)
                 Expanded(
                   child: Center(
-                    child: Text('暂无提交记录', style: TextStyle(color: Colors.grey[600])),
+                    child: Text('No commits yet',
+                        style: TextStyle(color: Colors.grey[600])),
                   ),
                 )
               else
@@ -123,14 +125,16 @@ class _LogModalState extends State<LogModal> with SingleTickerProviderStateMixin
                                 ),
                                 if (!isLast)
                                   Expanded(
-                                    child: Container(width: 2, color: Colors.grey[300]),
+                                    child: Container(
+                                        width: 2, color: Colors.grey[300]),
                                   ),
                               ],
                             ),
                             const SizedBox(width: 12),
                             Expanded(
                               child: Padding(
-                                padding: EdgeInsets.only(bottom: isLast ? 0 : 16),
+                                padding:
+                                    EdgeInsets.only(bottom: isLast ? 0 : 16),
                                 child: Column(
                                   crossAxisAlignment: CrossAxisAlignment.start,
                                   children: [
@@ -139,7 +143,9 @@ class _LogModalState extends State<LogModal> with SingleTickerProviderStateMixin
                                       style: TextStyle(
                                         fontSize: 12,
                                         fontFamily: 'monospace',
-                                        color: Theme.of(context).colorScheme.primary,
+                                        color: Theme.of(context)
+                                            .colorScheme
+                                            .primary,
                                       ),
                                     ),
                                     const SizedBox(height: 4),
@@ -147,13 +153,17 @@ class _LogModalState extends State<LogModal> with SingleTickerProviderStateMixin
                                       commit.message,
                                       style: TextStyle(
                                         fontSize: 14,
-                                        color: isDark ? Colors.white : Colors.black87,
+                                        color: isDark
+                                            ? Colors.white
+                                            : Colors.black87,
                                       ),
                                     ),
                                     const SizedBox(height: 4),
                                     Text(
                                       '${commit.author ?? 'unknown'} · ${_formatDate(commit.date)}',
-                                      style: TextStyle(fontSize: 11, color: Colors.grey[500]),
+                                      style: TextStyle(
+                                          fontSize: 11,
+                                          color: Colors.grey[500]),
                                     ),
                                   ],
                                 ),
@@ -176,8 +186,8 @@ class _LogModalState extends State<LogModal> with SingleTickerProviderStateMixin
     final now = DateTime.now();
     final diff = now.difference(date);
     if (diff.inMinutes < 1) return 'just now';
-    if (diff.inHours < 1) return '${diff.inMinutes} 分钟前';
-    if (diff.inDays < 1) return '${diff.inHours} 小时前';
-    return '${diff.inDays} 天前';
+    if (diff.inHours < 1) return '${diff.inMinutes} min ago';
+    if (diff.inDays < 1) return '${diff.inHours} hr ago';
+    return '${diff.inDays} day(s) ago';
   }
 }

@@ -104,7 +104,7 @@ class _GitDrawerState extends State<GitDrawer> {
     } catch (e) {
       if (!mounted) return;
       setState(() => _initialLoading = false);
-      _showToast('加载 Git 状态失败: $e', color: GitColors.error);
+      _showToast('Failed to load Git status: $e', color: GitColors.error);
     }
   }
 
@@ -172,8 +172,8 @@ class _GitDrawerState extends State<GitDrawer> {
     required void Function(ProjectOpStatus) setStatus,
     required ProjectOpStatus successStatus,
     ProjectOpStatus errorStatus = ProjectOpStatus.idle,
-    String successFallback = '操作完成',
-    String errorFallback = '操作失败',
+    String successFallback = 'Operation completed',
+    String errorFallback = 'Operation failed',
     bool refreshAfter = true,
   }) async {
     HapticFeedback.mediumImpact();
@@ -270,18 +270,18 @@ class _GitDrawerState extends State<GitDrawer> {
                             padding: const EdgeInsets.symmetric(horizontal: 12),
                             children: [
                               const SizedBox(height: 8),
-                              _buildSectionTitle('项目运行'),
+                              _buildSectionTitle('Project run'),
                               _buildProjectOpButton(
                                 icon: Icons.build_rounded,
                                 label: 'build',
-                                sublabel: '执行项目构建',
+                                sublabel: 'Run project build',
                                 status: _buildStatus,
                                 accentColor: GitColors.warning,
                                 onPress: () => _runProjectSseOperation(
                                   sheetTitle: 'build',
                                   stream: _git.streamRunBuild(),
                                   successStatus: ProjectOpStatus.idle,
-                                  successFallback: '构建完成',
+                                  successFallback: 'Build completed',
                                   setStatus: (s) =>
                                       setState(() => _buildStatus = s),
                                 ),
@@ -289,14 +289,14 @@ class _GitDrawerState extends State<GitDrawer> {
                               _buildProjectOpButton(
                                 icon: Icons.download_rounded,
                                 label: 'install',
-                                sublabel: '安装项目依赖',
+                                sublabel: 'Install project dependencies',
                                 status: _installStatus,
                                 accentColor: GitColors.commit,
                                 onPress: () => _runProjectSseOperation(
                                   sheetTitle: 'install',
                                   stream: _git.streamInstallDependencies(),
                                   successStatus: ProjectOpStatus.idle,
-                                  successFallback: '依赖安装完成',
+                                  successFallback: 'Dependencies installed',
                                   setStatus: (s) =>
                                       setState(() => _installStatus = s),
                                 ),
@@ -304,7 +304,9 @@ class _GitDrawerState extends State<GitDrawer> {
                               _buildProjectOpButton(
                                 icon: Icons.play_arrow_rounded,
                                 label: 'run dev',
-                                sublabel: devRunning ? 'dev 服务运行中' : '启动开发服务器',
+                                sublabel: devRunning
+                                    ? 'dev service is running'
+                                    : 'Start development server',
                                 status: _runDevStatus,
                                 accentColor: GitColors.success,
                                 isRunning: devRunning,
@@ -312,7 +314,7 @@ class _GitDrawerState extends State<GitDrawer> {
                                   sheetTitle: 'run dev',
                                   stream: _git.streamRunDev(),
                                   successStatus: ProjectOpStatus.running,
-                                  successFallback: '开发服务器已启动',
+                                  successFallback: 'Development server started',
                                   setStatus: (s) =>
                                       setState(() => _runDevStatus = s),
                                 ),
@@ -320,7 +322,7 @@ class _GitDrawerState extends State<GitDrawer> {
                                   sheetTitle: 'stop dev',
                                   stream: _git.streamStopDev(),
                                   successStatus: ProjectOpStatus.stopped,
-                                  successFallback: '已停止 dev 服务',
+                                  successFallback: 'Stopped dev service',
                                   setStatus: (s) =>
                                       setState(() => _runDevStatus = s),
                                 ),
@@ -329,8 +331,8 @@ class _GitDrawerState extends State<GitDrawer> {
                                 icon: Icons.slideshow_rounded,
                                 label: 'run preview',
                                 sublabel: previewRunning
-                                    ? 'preview 服务运行中'
-                                    : '启动预览服务器',
+                                    ? 'preview service is running'
+                                    : 'Start preview server',
                                 status: _runPreviewStatus,
                                 accentColor: GitColors.push,
                                 isRunning: previewRunning,
@@ -338,7 +340,7 @@ class _GitDrawerState extends State<GitDrawer> {
                                   sheetTitle: 'run preview',
                                   stream: _git.streamRunPreview(),
                                   successStatus: ProjectOpStatus.running,
-                                  successFallback: '预览服务已启动',
+                                  successFallback: 'Preview server started',
                                   setStatus: (s) =>
                                       setState(() => _runPreviewStatus = s),
                                 ),
@@ -346,7 +348,7 @@ class _GitDrawerState extends State<GitDrawer> {
                                   sheetTitle: 'stop preview',
                                   stream: _git.streamStopPreview(),
                                   successStatus: ProjectOpStatus.stopped,
-                                  successFallback: '已停止 preview 服务',
+                                  successFallback: 'Stopped preview service',
                                   setStatus: (s) =>
                                       setState(() => _runPreviewStatus = s),
                                 ),
@@ -354,14 +356,14 @@ class _GitDrawerState extends State<GitDrawer> {
                               _buildProjectOpButton(
                                 icon: Icons.stop_rounded,
                                 label: 'stop dev',
-                                sublabel: '停止 dev 服务',
+                                sublabel: 'Stop dev service',
                                 status: _stopDevStatus,
                                 accentColor: GitColors.error,
                                 onPress: () => _runProjectSseOperation(
                                   sheetTitle: 'stop dev',
                                   stream: _git.streamStopDev(),
                                   successStatus: ProjectOpStatus.stopped,
-                                  successFallback: '已停止 dev 服务',
+                                  successFallback: 'Stopped dev service',
                                   setStatus: (s) =>
                                       setState(() => _stopDevStatus = s),
                                 ),
@@ -369,14 +371,14 @@ class _GitDrawerState extends State<GitDrawer> {
                               _buildProjectOpButton(
                                 icon: Icons.stop_circle_outlined,
                                 label: 'stop preview',
-                                sublabel: '停止 preview 服务',
+                                sublabel: 'Stop preview service',
                                 status: _stopPreviewStatus,
                                 accentColor: GitColors.error,
                                 onPress: () => _runProjectSseOperation(
                                   sheetTitle: 'stop preview',
                                   stream: _git.streamStopPreview(),
                                   successStatus: ProjectOpStatus.stopped,
-                                  successFallback: '已停止 preview 服务',
+                                  successFallback: 'Stopped preview service',
                                   setStatus: (s) =>
                                       setState(() => _stopPreviewStatus = s),
                                 ),
@@ -384,7 +386,7 @@ class _GitDrawerState extends State<GitDrawer> {
                               _buildProjectOpButton(
                                 icon: Icons.terminal_rounded,
                                 label: 'npm command',
-                                sublabel: '执行 npm run/install/ci 指令',
+                                sublabel: 'Run npm run/install/ci command',
                                 status: _npmCommandStatus,
                                 accentColor: GitColors.branch,
                                 onPress: _runCustomNpmCommand,
@@ -394,7 +396,7 @@ class _GitDrawerState extends State<GitDrawer> {
                                 padding:
                                     const EdgeInsets.symmetric(horizontal: 8),
                                 child: Text(
-                                  '允许: npm run build/dev/preview/prod/lint/test, npm install, npm ci',
+                                  'Allowed: npm run build/dev/preview/prod/lint/test, npm install, npm ci',
                                   style: TextStyle(
                                     fontSize: 11,
                                     color: Colors.grey[600],
@@ -402,19 +404,19 @@ class _GitDrawerState extends State<GitDrawer> {
                                 ),
                               ),
                               const SizedBox(height: 16),
-                              _buildSectionTitle('同步'),
+                              _buildSectionTitle('Sync'),
                               _buildGitOpButton(
                                 icon: Icons.download_rounded,
                                 label: 'Pull',
                                 sublabel:
-                                    '从 origin/${summary?.branch ?? 'main'} 拉取并合并',
+                                    'Pull and merge from origin/${summary?.branch ?? 'main'}',
                                 status: _pullStatus,
                                 accentColor: GitColors.pull,
                                 onPress: () => _runGitOperation(
                                   action: () => _git.pull(
                                       branch: summary?.branch ?? 'main'),
                                   currentStatus: _pullStatus,
-                                  successFallback: '拉取完成',
+                                  successFallback: 'Pull completed',
                                   setStatus: (s) =>
                                       setState(() => _pullStatus = s),
                                 ),
@@ -422,17 +424,18 @@ class _GitDrawerState extends State<GitDrawer> {
                               _buildGitOpButton(
                                 icon: Icons.upload_rounded,
                                 label: 'Push',
-                                sublabel: '$commitsAhead 个提交待推送',
+                                sublabel: '$commitsAhead commits to push',
                                 status: _pushStatus,
                                 accentColor: GitColors.push,
                                 onPress: () => _showPushModal(context),
                               ),
                               const SizedBox(height: 16),
-                              _buildSectionTitle('更改'),
+                              _buildSectionTitle('Changes'),
                               _buildGitOpButton(
                                 icon: Icons.commit_rounded,
                                 label: 'Commit',
-                                sublabel: '${_worktree.files.length} 个文件已更改',
+                                sublabel:
+                                    '${_worktree.files.length} files changed',
                                 status: _commitStatus,
                                 accentColor: GitColors.commit,
                                 onPress: () => _showCommitModal(context),
@@ -440,23 +443,23 @@ class _GitDrawerState extends State<GitDrawer> {
                               _buildGitOpButton(
                                 icon: Icons.restore_rounded,
                                 label: 'Reset',
-                                sublabel: '重置到之前的提交',
+                                sublabel: 'Reset to an earlier commit',
                                 status: _resetStatus,
                                 accentColor: GitColors.reset,
                                 onPress: () => _showResetModal(context),
                               ),
                               const SizedBox(height: 16),
-                              _buildSectionTitle('高级'),
+                              _buildSectionTitle('Advanced'),
                               _buildGitOpButton(
                                 icon: Icons.archive_rounded,
-                                label: 'Stash 更改',
-                                sublabel: '保存更改以供稍后使用',
+                                label: 'Stash changes',
+                                sublabel: 'Save changes for later',
                                 status: _stashStatus,
                                 accentColor: GitColors.stash,
                                 onPress: () => _runGitOperation(
                                   action: _git.stash,
                                   currentStatus: _stashStatus,
-                                  successFallback: '更改已暂存',
+                                  successFallback: 'Changes stashed',
                                   setStatus: (s) =>
                                       setState(() => _stashStatus = s),
                                 ),
@@ -464,13 +467,13 @@ class _GitDrawerState extends State<GitDrawer> {
                               _buildGitOpButton(
                                 icon: Icons.unarchive_rounded,
                                 label: 'Stash Pop',
-                                sublabel: '恢复暂存的更改',
+                                sublabel: 'Restore stashed changes',
                                 status: _stashPopStatus,
                                 accentColor: GitColors.stash,
                                 onPress: () => _runGitOperation(
                                   action: _git.stashPop,
                                   currentStatus: _stashPopStatus,
-                                  successFallback: '更改已恢复',
+                                  successFallback: 'Changes restored',
                                   setStatus: (s) =>
                                       setState(() => _stashPopStatus = s),
                                 ),
@@ -478,15 +481,15 @@ class _GitDrawerState extends State<GitDrawer> {
                               _buildGitOpButton(
                                 icon: Icons.history_rounded,
                                 label: 'Git Log',
-                                sublabel: '查看最近的提交',
+                                sublabel: 'View recent commits',
                                 status: GitOpStatus.idle,
                                 accentColor: GitColors.log,
                                 onPress: () => _showLogModal(context),
                               ),
                               _buildGitOpButton(
                                 icon: Icons.account_tree_rounded,
-                                label: '切换分支',
-                                sublabel: '当前在 $currentBranch',
+                                label: 'Switch branch',
+                                sublabel: 'Current: $currentBranch',
                                 status: GitOpStatus.idle,
                                 accentColor: GitColors.branch,
                                 onPress: () => _showBranchModal(context),
@@ -529,32 +532,40 @@ class _GitDrawerState extends State<GitDrawer> {
       ),
       child: Row(
         children: [
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-            decoration: BoxDecoration(
-              color: theme.colorScheme.primary.withOpacity(0.15),
+          Material(
+            color: Colors.transparent,
+            child: InkWell(
               borderRadius: BorderRadius.circular(16),
-            ),
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Icon(Icons.account_tree_rounded,
-                    size: 14, color: theme.colorScheme.primary),
-                const SizedBox(width: 6),
-                ConstrainedBox(
-                  constraints: const BoxConstraints(maxWidth: 140),
-                  child: Text(
-                    currentBranch,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: TextStyle(
-                      color: theme.colorScheme.primary,
-                      fontSize: 13,
-                      fontWeight: FontWeight.w600,
-                    ),
-                  ),
+              onTap: () => _showBranchModal(context),
+              child: Container(
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                decoration: BoxDecoration(
+                  color: theme.colorScheme.primary.withOpacity(0.15),
+                  borderRadius: BorderRadius.circular(16),
                 ),
-              ],
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(Icons.account_tree_rounded,
+                        size: 14, color: theme.colorScheme.primary),
+                    const SizedBox(width: 6),
+                    ConstrainedBox(
+                      constraints: const BoxConstraints(maxWidth: 140),
+                      child: Text(
+                        currentBranch,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(
+                          color: theme.colorScheme.primary,
+                          fontSize: 13,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
             ),
           ),
           const SizedBox(width: 8),
@@ -599,7 +610,7 @@ class _GitDrawerState extends State<GitDrawer> {
             icon: const Icon(Icons.refresh_rounded, size: 18),
             visualDensity: VisualDensity.compact,
             onPressed: _refreshSliderData,
-            tooltip: '刷新',
+            tooltip: 'Refresh',
           ),
         ],
       ),
@@ -826,7 +837,7 @@ class _GitDrawerState extends State<GitDrawer> {
           Row(
             children: [
               Text(
-                '工作树状态',
+                'Working tree status',
                 style: TextStyle(
                   fontSize: 12,
                   color: Colors.grey[600],
@@ -861,7 +872,7 @@ class _GitDrawerState extends State<GitDrawer> {
             ),
           const SizedBox(height: 10),
           if (files.isEmpty)
-            Text('工作树干净',
+            Text('Working tree clean',
                 style: TextStyle(fontSize: 12, color: Colors.grey[600])),
           ...files.take(8).map((f) => Padding(
                 padding: const EdgeInsets.symmetric(vertical: 4),
@@ -871,7 +882,7 @@ class _GitDrawerState extends State<GitDrawer> {
                     borderRadius: BorderRadius.circular(8),
                     onTap: _worktreeActionLoading
                         ? null
-                        : () => _showWorktreeFileActions(context, f),
+                        : () => _viewFileChanges(context, f),
                     child: Padding(
                       padding: const EdgeInsets.symmetric(
                           horizontal: 6, vertical: 6),
@@ -937,7 +948,7 @@ class _GitDrawerState extends State<GitDrawer> {
           if (files.length > 8) ...[
             const SizedBox(height: 6),
             Text(
-              '还有 ${files.length - 8} 个文件',
+              '${files.length - 8} more files',
               style: TextStyle(fontSize: 11, color: Colors.grey[500]),
             ),
           ],
@@ -962,8 +973,9 @@ class _GitDrawerState extends State<GitDrawer> {
     final confirmed = await _showConfirmDialog(
       context,
       title: 'Discard All Changes',
-      message: '这会丢弃所有未提交改动。该操作不可撤销，是否继续？',
-      confirmLabel: '确认全部丢弃',
+      message:
+          'This will discard all uncommitted changes. This action cannot be undone. Continue?',
+      confirmLabel: 'Confirm discard all',
       destructive: true,
     );
     if (confirmed != true) return;
@@ -973,7 +985,8 @@ class _GitDrawerState extends State<GitDrawer> {
     if (!mounted) return;
     setState(() => _worktreeActionLoading = false);
     if (result.success) {
-      _showToast(result.message.isNotEmpty ? result.message : '已丢弃全部改动');
+      _showToast(
+          result.message.isNotEmpty ? result.message : 'All changes discarded');
       unawaited(_refreshSliderData());
       return;
     }
@@ -987,8 +1000,8 @@ class _GitDrawerState extends State<GitDrawer> {
     final confirmed = await _showConfirmDialog(
       context,
       title: 'Discard changes',
-      message: '将丢弃 `${file.path}` 的改动，是否继续？',
-      confirmLabel: '确认丢弃',
+      message: 'This will discard changes in `${file.path}`. Continue?',
+      confirmLabel: 'Confirm discard',
       destructive: true,
     );
     if (confirmed != true) return;
@@ -998,85 +1011,13 @@ class _GitDrawerState extends State<GitDrawer> {
     if (!mounted) return;
     setState(() => _worktreeActionLoading = false);
     if (result.success) {
-      _showToast(
-          result.message.isNotEmpty ? result.message : '已丢弃 ${file.path} 的改动');
+      _showToast(result.message.isNotEmpty
+          ? result.message
+          : 'Discarded changes in ${file.path}');
       unawaited(_refreshSliderData());
       return;
     }
     _showToast(result.message, color: GitColors.error);
-  }
-
-  Future<void> _showWorktreeFileActions(
-    BuildContext context,
-    GitWorktreeFile file,
-  ) async {
-    await showModalBottomSheet<void>(
-      context: context,
-      backgroundColor: Colors.transparent,
-      builder: (sheetContext) {
-        final isDark = Theme.of(sheetContext).brightness == Brightness.dark;
-        return Container(
-          decoration: BoxDecoration(
-            color: isDark ? const Color(0xFF1E1E1E) : Colors.white,
-            borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
-          ),
-          child: SafeArea(
-            child: Padding(
-              padding: const EdgeInsets.fromLTRB(20, 12, 20, 20),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  Container(
-                    width: 36,
-                    height: 4,
-                    margin: const EdgeInsets.only(bottom: 12),
-                    decoration: BoxDecoration(
-                      color: Colors.grey[400],
-                      borderRadius: BorderRadius.circular(2),
-                    ),
-                  ),
-                  Text(
-                    file.path,
-                    style: TextStyle(
-                      fontSize: 13,
-                      fontFamily: 'monospace',
-                      color: isDark ? Colors.white : Colors.black87,
-                    ),
-                  ),
-                  const SizedBox(height: 4),
-                  Text(
-                    '状态: ${file.statusCode.toUpperCase()}',
-                    style: TextStyle(fontSize: 12, color: Colors.grey[600]),
-                  ),
-                  const SizedBox(height: 16),
-                  OutlinedButton.icon(
-                    onPressed: () async {
-                      Navigator.pop(sheetContext);
-                      await _viewFileChanges(context, file);
-                    },
-                    icon: const Icon(Icons.visibility_rounded, size: 18),
-                    label: const Text('View changes'),
-                  ),
-                  const SizedBox(height: 8),
-                  FilledButton.icon(
-                    style: FilledButton.styleFrom(
-                      backgroundColor: GitColors.error,
-                    ),
-                    onPressed: () async {
-                      Navigator.pop(sheetContext);
-                      await _discardSingleFile(context, file);
-                    },
-                    icon: const Icon(Icons.restore_rounded, size: 18),
-                    label: const Text('Discard changes'),
-                  ),
-                ],
-              ),
-            ),
-          ),
-        );
-      },
-    );
   }
 
   Future<void> _viewFileChanges(
@@ -1100,7 +1041,7 @@ class _GitDrawerState extends State<GitDrawer> {
     } catch (e) {
       if (!mounted) return;
       setState(() => _worktreeActionLoading = false);
-      _showToast('加载文件改动失败: $e', color: GitColors.error);
+      _showToast('Failed to load file changes: $e', color: GitColors.error);
     }
   }
 
@@ -1119,7 +1060,7 @@ class _GitDrawerState extends State<GitDrawer> {
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(dialogContext, false),
-            child: const Text('取消'),
+            child: const Text('Cancel'),
           ),
           FilledButton(
             style: FilledButton.styleFrom(
@@ -1192,7 +1133,7 @@ class _GitDrawerState extends State<GitDrawer> {
             action: () => _git.commit(
                 message: message, filePaths: filePaths, addAll: addAll),
             currentStatus: _commitStatus,
-            successFallback: '提交成功',
+            successFallback: 'Commit successful',
             setStatus: (s) => setState(() => _commitStatus = s),
           );
         },
@@ -1208,7 +1149,8 @@ class _GitDrawerState extends State<GitDrawer> {
         setState(() => _resetCandidates = candidates);
       } catch (e) {
         if (!mounted) return;
-        _showToast('加载重置候选失败: $e', color: GitColors.error);
+        _showToast('Failed to load reset candidates: $e',
+            color: GitColors.error);
         return;
       }
     }
@@ -1229,7 +1171,7 @@ class _GitDrawerState extends State<GitDrawer> {
             await _runGitOperation(
               action: () => _git.reset(hash: commit.hash, mode: type),
               currentStatus: _resetStatus,
-              successFallback: '已重置到 ${commit.shortHash}',
+              successFallback: 'Reset to ${commit.shortHash}',
               setStatus: (s) => setState(() => _resetStatus = s),
             );
           },
@@ -1249,7 +1191,7 @@ class _GitDrawerState extends State<GitDrawer> {
         timeoutSeconds: input.timeoutSeconds,
       ),
       successStatus: ProjectOpStatus.idle,
-      successFallback: 'npm 命令执行完成',
+      successFallback: 'npm command completed',
       setStatus: (s) => setState(() => _npmCommandStatus = s),
     );
   }
@@ -1261,7 +1203,7 @@ class _GitDrawerState extends State<GitDrawer> {
     final result = await showDialog<_NpmCommandInput>(
       context: context,
       builder: (dialogContext) => AlertDialog(
-        title: const Text('执行 npm 命令'),
+        title: const Text('Run npm command'),
         content: Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -1286,7 +1228,7 @@ class _GitDrawerState extends State<GitDrawer> {
             ),
             const SizedBox(height: 8),
             Text(
-              '仅允许 npm run build/dev/preview/prod/lint/test, npm install, npm ci',
+              'Only allowed: npm run build/dev/preview/prod/lint/test, npm install, npm ci',
               style: TextStyle(fontSize: 12, color: Colors.grey[600]),
             ),
           ],
@@ -1294,19 +1236,21 @@ class _GitDrawerState extends State<GitDrawer> {
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(dialogContext),
-            child: const Text('取消'),
+            child: const Text('Cancel'),
           ),
           FilledButton(
             onPressed: () {
               final command = commandController.text.trim();
               if (command.isEmpty) {
-                _showToast('请输入 npm 命令', color: GitColors.error);
+                _showToast('Please enter an npm command',
+                    color: GitColors.error);
                 return;
               }
 
               final timeoutValue = int.tryParse(timeoutController.text.trim());
               if (timeoutValue == null || timeoutValue <= 0) {
-                _showToast('Timeout 必须是正整数', color: GitColors.error);
+                _showToast('Timeout must be a positive integer',
+                    color: GitColors.error);
                 return;
               }
 
@@ -1318,7 +1262,7 @@ class _GitDrawerState extends State<GitDrawer> {
                 ),
               );
             },
-            child: const Text('执行'),
+            child: const Text('Run'),
           ),
         ],
       ),
@@ -1336,7 +1280,7 @@ class _GitDrawerState extends State<GitDrawer> {
       setState(() => _pushPreview = preview);
     } catch (e) {
       if (!mounted) return;
-      _showToast('获取推送预检查失败: $e', color: GitColors.error);
+      _showToast('Failed to get push precheck: $e', color: GitColors.error);
       return;
     }
 
@@ -1357,7 +1301,7 @@ class _GitDrawerState extends State<GitDrawer> {
             action: () =>
                 _git.push(branch: preview.branch, remote: preview.remote),
             currentStatus: _pushStatus,
-            successFallback: '推送完成',
+            successFallback: 'Push completed',
             setStatus: (s) => setState(() => _pushStatus = s),
           );
         },
@@ -1372,7 +1316,7 @@ class _GitDrawerState extends State<GitDrawer> {
       setState(() => _logCommits = commits);
     } catch (e) {
       if (!mounted) return;
-      _showToast('加载日志失败: $e', color: GitColors.error);
+      _showToast('Failed to load log: $e', color: GitColors.error);
       return;
     }
 
@@ -1396,7 +1340,7 @@ class _GitDrawerState extends State<GitDrawer> {
       setState(() => _branches = branches);
     } catch (e) {
       if (!mounted) return;
-      _showToast('加载分支失败: $e', color: GitColors.error);
+      _showToast('Failed to load branches: $e', color: GitColors.error);
       return;
     }
 
@@ -1415,7 +1359,7 @@ class _GitDrawerState extends State<GitDrawer> {
             action: () => _git.checkout(branch: branch.fullName),
             currentStatus: GitOpStatus.idle,
             successFallback:
-                '已切换到分支 ${branch.isRemote ? branch.fullName : branch.name}',
+                'Switched to branch ${branch.isRemote ? branch.fullName : branch.name}',
             setStatus: (_) {},
           );
         },
@@ -1428,7 +1372,7 @@ class _GitDrawerState extends State<GitDrawer> {
               startPoint: fromBranch.fullName,
             ),
             currentStatus: GitOpStatus.idle,
-            successFallback: '已创建并切换到分支 $newBranchName',
+            successFallback: 'Created and switched to branch $newBranchName',
             setStatus: (_) {},
           );
         },

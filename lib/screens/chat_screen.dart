@@ -35,6 +35,8 @@ class _ChatScreenState extends State<ChatScreen> {
     'vibe-code-mobile',
   ];
   static const String _addProjectValue = '__add_project__';
+  static const double _projectNameMinWidth = 96;
+  static const double _projectNameMaxWidth = 220;
 
   final TextEditingController _textController = TextEditingController();
   final ScrollController _scrollController = ScrollController();
@@ -167,7 +169,7 @@ class _ChatScreenState extends State<ChatScreen> {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text(
-              '添加 Project',
+              'Add Project',
               style: Theme.of(context)
                   .textTheme
                   .titleMedium
@@ -177,7 +179,7 @@ class _ChatScreenState extends State<ChatScreen> {
             TextField(
               controller: controller,
               decoration: const InputDecoration(
-                labelText: 'GitHub 地址',
+                labelText: 'GitHub URL',
                 hintText: 'https://github.com/owner/repo',
                 prefixIcon: Icon(Icons.link),
               ),
@@ -189,7 +191,7 @@ class _ChatScreenState extends State<ChatScreen> {
                 Expanded(
                   child: OutlinedButton(
                     onPressed: () => Navigator.of(context).pop(),
-                    child: const Text('取消'),
+                    child: const Text('Cancel'),
                   ),
                 ),
                 const SizedBox(width: 10),
@@ -201,7 +203,8 @@ class _ChatScreenState extends State<ChatScreen> {
                       if (projectName == null) {
                         if (!context.mounted) return;
                         ScaffoldMessenger.of(context).showSnackBar(
-                          const SnackBar(content: Text('请输入有效的 GitHub 地址')),
+                          const SnackBar(
+                              content: Text('Please enter a valid GitHub URL')),
                         );
                         return;
                       }
@@ -214,7 +217,7 @@ class _ChatScreenState extends State<ChatScreen> {
                       if (!context.mounted) return;
                       Navigator.of(context).pop();
                     },
-                    child: const Text('添加'),
+                    child: const Text('Add'),
                   ),
                 ),
               ],
@@ -275,7 +278,7 @@ class _ChatScreenState extends State<ChatScreen> {
     if (remainingSlots <= 0) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('已达到最大附件数量限制 (9个)')),
+        const SnackBar(content: Text('Maximum attachment limit reached (9).')),
       );
       return;
     }
@@ -288,7 +291,9 @@ class _ChatScreenState extends State<ChatScreen> {
     if (photosToAdd.length < photos.length) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('已选择前 $remainingSlots 张图片，最多可添加 9 个附件')),
+        SnackBar(
+            content: Text(
+                'Selected the first $remainingSlots images. You can add up to 9 attachments.')),
       );
     }
 
@@ -303,7 +308,7 @@ class _ChatScreenState extends State<ChatScreen> {
     if (remainingSlots <= 0) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('已达到最大附件数量限制 (9个)')),
+        const SnackBar(content: Text('Maximum attachment limit reached (9).')),
       );
       return;
     }
@@ -315,7 +320,9 @@ class _ChatScreenState extends State<ChatScreen> {
     if (filesToAdd.length < result.files.length) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('已选择前 $remainingSlots 个文件，最多可添加 9 个附件')),
+        SnackBar(
+            content: Text(
+                'Selected the first $remainingSlots files. You can add up to 9 attachments.')),
       );
     }
 
@@ -407,7 +414,7 @@ class _ChatScreenState extends State<ChatScreen> {
     if (fileSize > 25 * 1024 * 1024) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('音频文件不能超过 25MB')),
+        const SnackBar(content: Text('Audio files must be 25MB or smaller.')),
       );
       return;
     }
@@ -428,7 +435,8 @@ class _ChatScreenState extends State<ChatScreen> {
     if (fileSize > 25 * 1024 * 1024) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('录音时间过长，请缩短录音')),
+        const SnackBar(
+            content: Text('Recording is too long. Please shorten it.')),
       );
       return;
     }
@@ -509,7 +517,8 @@ class _ChatScreenState extends State<ChatScreen> {
                 if (_pendingAttachments.length >= 9) {
                   Navigator.of(context).pop();
                   ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(content: Text('已达到最大附件数量限制 (9个)')),
+                    const SnackBar(
+                        content: Text('Maximum attachment limit reached (9).')),
                   );
                   return;
                 }
@@ -525,14 +534,38 @@ class _ChatScreenState extends State<ChatScreen> {
     );
   }
 
+  double _projectLabelWidth(
+    BuildContext context,
+    String projectName,
+    TextStyle style,
+  ) {
+    final painter = TextPainter(
+      text: TextSpan(text: projectName, style: style),
+      maxLines: 1,
+      textDirection: Directionality.of(context),
+      textScaler: MediaQuery.textScalerOf(context),
+    )..layout();
+
+    return painter.width.clamp(_projectNameMinWidth, _projectNameMaxWidth);
+  }
+
   @override
   Widget build(BuildContext context) {
     final chat = context.watch<ChatService>();
     final auth = context.read<AuthService>();
     final messages = chat.messages;
+    const projectTextStyle = TextStyle(
+      fontSize: 15,
+      fontWeight: FontWeight.w600,
+    );
+    final selectedProjectWidth =
+        _projectLabelWidth(context, _selectedProject, projectTextStyle);
 
     return Scaffold(
-      drawer: GitDrawer(projectName: _selectedProject),
+      drawer: GitDrawer(
+        key: ValueKey(_selectedProject),
+        projectName: _selectedProject,
+      ),
       endDrawer: const ChatListDrawer(),
       appBar: AppBar(
         leading: Builder(
@@ -548,25 +581,45 @@ class _ChatScreenState extends State<ChatScreen> {
               child: DropdownButton<String>(
                 isDense: true,
                 value: _selectedProject,
+                alignment: Alignment.center,
                 icon: const Icon(Icons.keyboard_arrow_down),
                 items: [
                   ..._projects.map(
                     (project) => DropdownMenuItem<String>(
                       value: project,
-                      child: Text(
-                        project,
-                        overflow: TextOverflow.ellipsis,
-                        style: const TextStyle(
-                          fontSize: 15,
-                          fontWeight: FontWeight.w600,
+                      child: ConstrainedBox(
+                        constraints: const BoxConstraints(
+                          minWidth: _projectNameMinWidth,
+                          maxWidth: _projectNameMaxWidth,
+                        ),
+                        child: Text(
+                          project,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: projectTextStyle,
                         ),
                       ),
                     ),
                   ),
                   const DropdownMenuItem<String>(
                     value: _addProjectValue,
-                    child: Text('+ 添加 Project'),
+                    child: Text('+ Add Project'),
                   ),
+                ],
+                selectedItemBuilder: (context) => [
+                  ..._projects.map(
+                    (project) => SizedBox(
+                      width: selectedProjectWidth,
+                      child: Text(
+                        project,
+                        textAlign: TextAlign.center,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: projectTextStyle,
+                      ),
+                    ),
+                  ),
+                  const SizedBox.shrink(),
                 ],
                 onChanged: (value) async {
                   if (value == null) return;
@@ -653,7 +706,7 @@ class _ChatScreenState extends State<ChatScreen> {
                         color: Colors.white,
                         child: const Center(
                           child: Text(
-                            '开始新对话',
+                            'Start a new chat',
                             style: TextStyle(
                               fontSize: 18,
                               color: Colors.grey,
@@ -690,7 +743,7 @@ class _ChatScreenState extends State<ChatScreen> {
                                 padding: EdgeInsets.only(bottom: 8),
                                 child: Center(
                                   child: Text(
-                                    '上滑加载更多历史',
+                                    'Scroll up to load more history',
                                     style: TextStyle(
                                       fontSize: 12,
                                       color: Colors.grey,

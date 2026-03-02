@@ -352,7 +352,7 @@ class GitService extends ChangeNotifier {
 
     final payload = _payload(response.details);
     if (payload is String && payload.trim().isNotEmpty) return payload.trim();
-    throw Exception('未获取到 commit message');
+    throw Exception('No commit message generated');
   }
 
   Future<List<GitCommit>> getResetCandidates({

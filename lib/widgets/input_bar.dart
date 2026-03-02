@@ -193,7 +193,7 @@ class _InputBarState extends State<InputBar> {
                                   borderRadius: BorderRadius.circular(22),
                                 ),
                                 child: const Text(
-                                  '按住说话',
+                                  'Hold to talk',
                                   style: TextStyle(
                                     fontSize: 17,
                                     fontWeight: FontWeight.w500,
@@ -214,7 +214,7 @@ class _InputBarState extends State<InputBar> {
                                 minLines: 1,
                                 style: const TextStyle(fontSize: 17),
                                 decoration: const InputDecoration(
-                                  hintText: '发消息...',
+                                  hintText: 'Message...',
                                   hintStyle: TextStyle(color: Colors.grey),
                                   contentPadding: EdgeInsets.symmetric(
                                       horizontal: 16, vertical: 10),
@@ -313,7 +313,7 @@ class _InputBarState extends State<InputBar> {
                   textAlignVertical: TextAlignVertical.top,
                   style: const TextStyle(fontSize: 17),
                   decoration: const InputDecoration(
-                    hintText: '发消息...',
+                    hintText: 'Message...',
                     hintStyle: TextStyle(color: Colors.grey),
                     border: InputBorder.none,
                   ),
@@ -397,16 +397,17 @@ class _InputBarState extends State<InputBar> {
           final shouldOpenSettings = await showDialog<bool>(
             context: context,
             builder: (context) => AlertDialog(
-              title: const Text('需要麦克风权限'),
-              content: const Text('语音输入需要麦克风权限，是否前往设置开启？'),
+              title: const Text('Microphone permission required'),
+              content: const Text(
+                  'Voice input requires microphone access. Open Settings?'),
               actions: [
                 TextButton(
                   onPressed: () => Navigator.pop(context, false),
-                  child: const Text('取消'),
+                  child: const Text('Cancel'),
                 ),
                 TextButton(
                   onPressed: () => Navigator.pop(context, true),
-                  child: const Text('去设置'),
+                  child: const Text('Open Settings'),
                 ),
               ],
             ),
@@ -440,7 +441,8 @@ class _InputBarState extends State<InputBar> {
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(
-              content: Text('无法开始录音，请确保已在手机设置中允许麦克风权限'),
+              content: Text(
+                  'Unable to start recording. Please allow microphone access in system settings.'),
               duration: Duration(seconds: 3),
             ),
           );
@@ -490,7 +492,7 @@ class _InputBarState extends State<InputBar> {
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(
-              content: Text('录音太短取消了'),
+              content: Text('Recording too short, canceled.'),
               duration: Duration(seconds: 2),
             ),
           );
@@ -502,7 +504,7 @@ class _InputBarState extends State<InputBar> {
           try {
             filePath = await widget._recorder!.stopRecording();
           } catch (e) {
-            debugPrint('停止录音失败: $e');
+            debugPrint('Failed to stop recording: $e');
           }
         }
 
@@ -511,11 +513,12 @@ class _InputBarState extends State<InputBar> {
           widget.onRecordingComplete!(filePath);
         } else if (filePath == null) {
           // 录音失败，提示用户去设置中开启权限
-          debugPrint('录音失败或文件路径为空');
+          debugPrint('Recording failed or file path is empty');
           if (mounted) {
             ScaffoldMessenger.of(context).showSnackBar(
               const SnackBar(
-                content: Text('请在手机设置中允许麦克风权限'),
+                content:
+                    Text('Please allow microphone access in system settings.'),
                 duration: Duration(seconds: 3),
               ),
             );
@@ -547,7 +550,9 @@ class _InputBarState extends State<InputBar> {
 
   Widget _buildRecordingOverlay() {
     final baseColor = _isCancelling ? Colors.red : const Color(0xFF2196F3);
-    final text = _isCancelling ? '松手取消' : '松手发送，上移取消';
+    final text = _isCancelling
+        ? 'Release to cancel'
+        : 'Release to send, slide up to cancel';
 
     return Container(
       width: MediaQuery.of(context).size.width,

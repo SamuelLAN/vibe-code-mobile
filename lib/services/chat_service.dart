@@ -262,12 +262,12 @@ class ChatService extends ChangeNotifier {
     debugPrint('[ChatService]   - 扩展名: $fileExt');
     debugPrint('[ChatService]   - MIME类型: $mimeType');
 
-    // 验证文件格式（m4a/wav 都可接受）
+    // 验证文件格式（m4a/wav 都可接受)
     if (fileExt != 'wav' && fileExt != 'm4a') {
-      debugPrint('[ChatService] 警告: 语音文件扩展名不是常见格式(wav/m4a)，实际: $fileExt');
+      debugPrint('[ChatService] 警告: 语音文件扩展名不是常见格式(wav/m4a), 实际: $fileExt');
     }
 
-    // 读取文件头验证格式（仅对 WAV 强制校验 RIFF）
+    // 读取文件头验证格式（仅对 WAV 强制校验 RIFF)
     try {
       final bytes = await audioFile.openRead(0, 12).fold<List<int>>(<int>[],
           (acc, chunk) {
@@ -295,7 +295,7 @@ class ChatService extends ChangeNotifier {
 
     final messageId = _uuid.v4();
 
-    // 创建语音消息，初始状态为转录中
+    // 创建语音消息, 初始状态为转录中
     final attachment = Attachment(
       id: 'voice_${DateTime.now().millisecondsSinceEpoch}',
       path: audioFile.path,
@@ -310,7 +310,7 @@ class ChatService extends ChangeNotifier {
       id: messageId,
       chatId: _activeChat!.id,
       role: MessageRole.user,
-      content: '[语音消息]', // 初始内容
+      content: '[Voice message]', // 初始内容
       createdAt: DateTime.now(),
       attachments: [attachment],
     );
@@ -322,7 +322,8 @@ class ChatService extends ChangeNotifier {
     // 获取 access token
     final accessToken = await _authService?.getValidToken();
     if (accessToken == null) {
-      _updateAttachmentStatus(attachment, TranscriptionStatus.error, '认证失败');
+      _updateAttachmentStatus(
+          attachment, TranscriptionStatus.error, 'Authentication failed');
       notifyListeners();
       return;
     }
@@ -369,7 +370,7 @@ class ChatService extends ChangeNotifier {
         },
       );
 
-      // 转写完成后，调用 AI 回复接口
+      // 转写完成后, 调用 AI 回复接口
       final finalText = transcribedText.toString();
       if (isTranscribeComplete && finalText.isNotEmpty) {
         final result = await _generateAssistantResponse(finalText);
@@ -565,13 +566,15 @@ class ChatService extends ChangeNotifier {
       _finishAssistantStream(
         assistantMessage: assistantMessage,
         generationId: generationId,
-        error: '认证失败，请重新登录',
+        error: 'Authentication failed. Please sign in again.',
       );
       return _GenerationResult.failed;
     }
     final projectName = await _effectiveProjectName();
     final contentBlocks = await _buildContentBlocks(prompt, attachments);
-    final fallbackPrompt = prompt.trim().isNotEmpty ? prompt : '请结合附件内容回答';
+    final fallbackPrompt = prompt.trim().isNotEmpty
+        ? prompt
+        : 'Please answer using the attachment content.';
 
     bool chatMissingError = false;
     bool authInvalidError = false;
@@ -634,7 +637,7 @@ class ChatService extends ChangeNotifier {
             _finishAssistantStream(
               assistantMessage: assistantMessage,
               generationId: generationId,
-              error: event.error ?? event.text ?? '生成失败',
+              error: event.error ?? event.text ?? 'Generation failed',
             );
             break;
         }
@@ -656,7 +659,7 @@ class ChatService extends ChangeNotifier {
           );
         }
       }
-      _error = '登录状态已过期，请重新登录';
+      _error = 'Session expired. Please sign in again.';
       notifyListeners();
       return _GenerationResult.failed;
     }
@@ -749,7 +752,7 @@ class ChatService extends ChangeNotifier {
     } catch (e) {
       debugPrint('[ChatService] stopGeneration failed for $flowId: $e');
       if (_activeGenerationId == null || _activeGenerationId == generationId) {
-        _error = '停止生成失败: $e';
+        _error = 'Failed to stop generation: $e';
         notifyListeners();
       }
     }
@@ -785,12 +788,12 @@ class ChatService extends ChangeNotifier {
         attachments.where((a) => a.type != AttachmentType.image).length;
     final parts = <String>[];
     if (imageCount > 0) {
-      parts.add('$imageCount 张图片');
+      parts.add('$imageCount images');
     }
     if (fileCount > 0) {
-      parts.add('$fileCount 个文件');
+      parts.add('$fileCount files');
     }
-    return '附件消息（${parts.join('，')}）';
+    return 'Attachment message (${parts.join(', ')})';
   }
 
   Future<List<Map<String, dynamic>>> _buildContentBlocks(
@@ -806,7 +809,7 @@ class ChatService extends ChangeNotifier {
     for (final attachment in attachments) {
       final file = File(attachment.path);
       if (!await file.exists()) {
-        debugPrint('[ChatService] 附件不存在，已跳过: ${attachment.path}');
+        debugPrint('[ChatService] 附件不存在, 已跳过: ${attachment.path}');
         continue;
       }
 
@@ -975,7 +978,7 @@ class ChatService extends ChangeNotifier {
       await _updateChatPreviewFromMessages(chatId);
     } catch (e) {
       debugPrint('[ChatService] load remote history failed for $chatId: $e');
-      _historyError = '历史消息加载失败: $e';
+      _historyError = 'Failed to load message history: $e';
       _historyLoadedChatIds.add(chatId);
       notifyListeners();
     }
@@ -1034,13 +1037,15 @@ class ChatService extends ChangeNotifier {
     _loadedFlowCountByChat[chatId] = end;
 
     if (failedFlowIds.isNotEmpty) {
-      _historyError = '历史 flow 加载失败: ${failedFlowIds.join(', ')}';
+      _historyError =
+          'Failed to load history flow: ${failedFlowIds.join(', ')}';
       notifyListeners();
       return;
     }
 
     if (selectedFlowIds.isNotEmpty && loadedMessages.isEmpty) {
-      _historyError = '已请求历史 flow，但未解析到可展示的消息数据';
+      _historyError =
+          'History flow requested, but no displayable message data was parsed.';
       notifyListeners();
     }
   }

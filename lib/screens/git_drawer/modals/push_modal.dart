@@ -72,18 +72,21 @@ class PushModal extends StatelessWidget {
                     ),
                     child: Column(
                       children: [
-                        InfoRow(label: '分支', child: BranchBadge(branch: branch)),
+                        InfoRow(
+                            label: 'Branch',
+                            child: BranchBadge(branch: branch)),
                         const SizedBox(height: 10),
                         InfoRow(
-                          label: '远程',
+                          label: 'Remote',
                           child: Text(
                             remote,
-                            style: TextStyle(color: isDark ? Colors.white : Colors.black87),
+                            style: TextStyle(
+                                color: isDark ? Colors.white : Colors.black87),
                           ),
                         ),
                         const SizedBox(height: 10),
                         InfoRow(
-                          label: '待推送',
+                          label: 'Ahead',
                           child: Text(
                             '↑ $aheadCount',
                             style: const TextStyle(
@@ -98,8 +101,8 @@ class PushModal extends StatelessWidget {
                   const SizedBox(height: 14),
                   Text(
                     aheadCount > 0
-                        ? '这将推送 $aheadCount 个提交到 $remote/$branch。是否继续？'
-                        : '当前没有待推送提交。',
+                        ? 'This will push $aheadCount commits to $remote/$branch. Continue?'
+                        : 'There are no commits to push.',
                     style: TextStyle(fontSize: 14, color: Colors.grey[600]),
                   ),
                   const SizedBox(height: 16),
@@ -108,7 +111,8 @@ class PushModal extends StatelessWidget {
                       backgroundColor: GitColors.push,
                       foregroundColor: Colors.white,
                       padding: const EdgeInsets.symmetric(vertical: 14),
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                      shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(12)),
                     ),
                     onPressed: aheadCount > 0 ? onConfirm : null,
                     child: Row(
@@ -116,7 +120,7 @@ class PushModal extends StatelessWidget {
                       children: [
                         const Icon(Icons.upload_rounded, size: 18),
                         const SizedBox(width: 8),
-                        Text('推送到 $remote/$branch'),
+                        Text('Push to $remote/$branch'),
                       ],
                     ),
                   ),

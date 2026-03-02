@@ -41,8 +41,8 @@ class _LoginScreenState extends State<LoginScreen> {
       return;
     }
     if (!success && mounted) {
-      final error = auth.error ?? '登录失败';
-      final isNetworkError = error.contains('网络连接失败');
+      final error = auth.error ?? 'Login failed';
+      final isNetworkError = error.contains('Network connection failed');
 
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
@@ -61,13 +61,15 @@ class _LoginScreenState extends State<LoginScreen> {
                     } else {
                       if (mounted) {
                         ScaffoldMessenger.of(context).showSnackBar(
-                          const SnackBar(content: Text('无法打开设置，请手动在手机设置中检查网络')),
+                          const SnackBar(
+                              content: Text(
+                                  'Cannot open Settings. Please check your network in system settings manually.')),
                         );
                       }
                     }
                   },
-                  child:
-                      const Text('打开设置', style: TextStyle(color: Colors.white)),
+                  child: const Text('Open Settings',
+                      style: TextStyle(color: Colors.white)),
                 ),
             ],
           ),

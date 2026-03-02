@@ -73,7 +73,7 @@ class _ResetModalState extends State<ResetModal> {
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
                   Text(
-                    '重置到提交',
+                    'Reset to commit',
                     style: TextStyle(
                       fontSize: 18,
                       fontWeight: FontWeight.w700,
@@ -179,7 +179,7 @@ class _ResetModalState extends State<ResetModal> {
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
                         Text(
-                          '选择目标 Revision',
+                          'Select target revision',
                           style: TextStyle(
                             fontSize: 12,
                             fontWeight: FontWeight.w600,
@@ -188,7 +188,7 @@ class _ResetModalState extends State<ResetModal> {
                         ),
                         if (widget.commits.isNotEmpty)
                           Text(
-                            '${widget.commits.length} 个可选',
+                            '${widget.commits.length} options',
                             style: TextStyle(
                               fontSize: 11,
                               color: Colors.grey[500],
@@ -200,7 +200,7 @@ class _ResetModalState extends State<ResetModal> {
                     Expanded(
                       child: widget.commits.isEmpty
                           ? Center(
-                              child: Text('暂无可重置提交',
+                              child: Text('No commits available for reset',
                                   style: TextStyle(color: Colors.grey[600])),
                             )
                           : ListView.separated(
@@ -310,7 +310,7 @@ class _ResetModalState extends State<ResetModal> {
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
                             Text(
-                              '目标提交',
+                              'Target commit',
                               style: TextStyle(
                                 fontSize: 12,
                                 color: Colors.grey[600],
@@ -327,7 +327,7 @@ class _ResetModalState extends State<ResetModal> {
                             ),
                             const SizedBox(height: 2),
                             Text(
-                              '命令预览: git reset --$_resetType ${selected.hash}',
+                              'Command preview: git reset --$_resetType ${selected.hash}',
                               style: TextStyle(
                                 fontSize: 11,
                                 fontFamily: 'monospace',
@@ -357,8 +357,8 @@ class _ResetModalState extends State<ResetModal> {
                           const Icon(Icons.restore_rounded, size: 18),
                           const SizedBox(width: 8),
                           Text(_resetType == 'hard'
-                              ? '硬重置'
-                              : '${_resetType[0].toUpperCase()}${_resetType.substring(1)} 重置'),
+                              ? 'Hard reset'
+                              : '${_resetType[0].toUpperCase()}${_resetType.substring(1)} reset'),
                         ],
                       ),
                     ),
@@ -379,13 +379,13 @@ class _ResetModalState extends State<ResetModal> {
       builder: (dialogContext) {
         final isDark = Theme.of(dialogContext).brightness == Brightness.dark;
         return AlertDialog(
-          title: Text(isHard ? '确认硬重置' : '确认重置'),
+          title: Text(isHard ? 'Confirm hard reset' : 'Confirm reset'),
           content: Column(
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Text(
-                '将执行 git reset --$_resetType ${commit.hash}',
+                'Will run git reset --$_resetType ${commit.hash}',
                 style: TextStyle(
                   fontSize: 12,
                   fontFamily: 'monospace',
@@ -395,7 +395,7 @@ class _ResetModalState extends State<ResetModal> {
               const SizedBox(height: 10),
               Text(
                 isHard
-                    ? '这会移动 HEAD，并永久丢弃暂存区和工作区的改动。请再次确认。'
+                    ? 'This will move HEAD and permanently discard staged and working tree changes. Please confirm again.'
                     : _modeRiskHint(_resetType),
                 style: TextStyle(
                   fontSize: 13,
@@ -407,7 +407,7 @@ class _ResetModalState extends State<ResetModal> {
           actions: [
             TextButton(
               onPressed: () => Navigator.pop(dialogContext, false),
-              child: const Text('取消'),
+              child: const Text('Cancel'),
             ),
             FilledButton(
               style: FilledButton.styleFrom(
@@ -416,7 +416,7 @@ class _ResetModalState extends State<ResetModal> {
                     : Theme.of(context).colorScheme.primary,
               ),
               onPressed: () => Navigator.pop(dialogContext, true),
-              child: Text(isHard ? '确认硬重置' : '确认执行'),
+              child: Text(isHard ? 'Confirm hard reset' : 'Confirm'),
             ),
           ],
         );
@@ -431,31 +431,31 @@ class _ResetModalState extends State<ResetModal> {
   String _modeDescription(String mode) {
     switch (mode) {
       case 'soft':
-        return 'soft: 仅移动 HEAD 到目标提交；暂存区和工作区保持不变，适合重新整理最近提交。';
+        return 'soft: move HEAD only. Index and working tree stay unchanged; useful for reorganizing recent commits.';
       case 'hard':
-        return 'hard: 移动 HEAD、重置暂存区并覆盖工作区。未提交改动会被丢弃。';
+        return 'hard: move HEAD, reset index, and overwrite working tree. Uncommitted changes will be lost.';
       case 'mixed':
       default:
-        return 'mixed: 移动 HEAD 并重置暂存区，工作区改动保留（默认 reset 行为）。';
+        return 'mixed: move HEAD and reset index while keeping working tree changes (default reset behavior).';
     }
   }
 
   String _modeRiskHint(String mode) {
     switch (mode) {
       case 'soft':
-        return '只会回退提交历史，不会改动文件内容。';
+        return 'Only rewinds commit history; file contents remain unchanged.';
       case 'mixed':
-        return '会取消暂存状态，文件改动仍保留在工作区。';
+        return 'Unstages changes while keeping file modifications in the working tree.';
       default:
-        return '请确认此操作符合预期。';
+        return 'Please confirm this operation is expected.';
     }
   }
 
   String _formatDate(DateTime date) {
     final diff = DateTime.now().difference(date);
-    if (diff.inMinutes < 1) return '刚刚';
-    if (diff.inHours < 1) return '${diff.inMinutes} 分钟前';
-    if (diff.inDays < 1) return '${diff.inHours} 小时前';
-    return '${diff.inDays} 天前';
+    if (diff.inMinutes < 1) return 'just now';
+    if (diff.inHours < 1) return '${diff.inMinutes} min ago';
+    if (diff.inDays < 1) return '${diff.inHours} hr ago';
+    return '${diff.inDays} day(s) ago';
   }
 }

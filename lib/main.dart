@@ -101,7 +101,7 @@ class AuthGate extends StatefulWidget {
 class _AuthGateState extends State<AuthGate> with WidgetsBindingObserver {
   bool _authReady = false;
   bool _chatReady = false;
-  String _bootstrapStep = '准备启动...';
+  String _bootstrapStep = 'Preparing startup...';
 
   @override
   void initState() {
@@ -129,26 +129,26 @@ class _AuthGateState extends State<AuthGate> with WidgetsBindingObserver {
   }
 
   Future<void> _bootstrap() async {
-    _logStep('应用启动，准备初始化服务');
+    _logStep('App started, preparing initialization');
     final auth = context.read<AuthService>();
     final chatService = context.read<ChatService>();
 
     try {
-      _setBootstrapStep('正在初始化认证服务...');
-      _logStep('开始初始化认证服务');
+      _setBootstrapStep('Initializing auth service...');
+      _logStep('Starting auth service initialization');
       await auth.tryAutoLogin();
-      _logStep('认证服务初始化完成');
+      _logStep('Auth service initialized');
 
-      _setBootstrapStep('正在初始化聊天服务...');
-      _logStep('开始初始化聊天服务');
+      _setBootstrapStep('Initializing chat service...');
+      _logStep('Starting chat service initialization');
       await chatService.initialize();
-      _logStep('聊天服务初始化完成');
+      _logStep('Chat service initialized');
 
-      _setBootstrapStep('初始化完成');
-      _logStep('应用初始化完成');
+      _setBootstrapStep('Initialization complete');
+      _logStep('App initialization complete');
     } catch (e, st) {
-      _setBootstrapStep('初始化失败，请稍后重试');
-      _logStep('初始化异常: $e');
+      _setBootstrapStep('Initialization failed, please try again later');
+      _logStep('Initialization exception: $e');
       debugPrint('[AuthGate] bootstrap stacktrace:\n$st');
     } finally {
       if (!mounted) return;

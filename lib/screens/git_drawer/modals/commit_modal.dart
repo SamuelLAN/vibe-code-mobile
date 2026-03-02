@@ -82,7 +82,8 @@ class _CommitModalState extends State<CommitModal> {
       final trimmed = generated.trim();
       if (trimmed.isEmpty) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('未生成有效的提交信息')),
+          const SnackBar(
+              content: Text('No valid commit message was generated.')),
         );
         return;
       }
@@ -94,7 +95,7 @@ class _CommitModalState extends State<CommitModal> {
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('生成提交信息失败: $e')),
+        SnackBar(content: Text('Failed to generate commit message: $e')),
       );
     } finally {
       if (mounted) {
@@ -166,7 +167,7 @@ class _CommitModalState extends State<CommitModal> {
                         style: TextStyle(
                             color: isDark ? Colors.white : Colors.black87),
                         decoration: InputDecoration(
-                          hintText: '提交信息...',
+                          hintText: 'Commit message...',
                           hintStyle: TextStyle(color: Colors.grey[500]),
                           filled: true,
                           fillColor: isDark ? Colors.white10 : Colors.grey[100],
@@ -175,7 +176,7 @@ class _CommitModalState extends State<CommitModal> {
                             borderSide: BorderSide.none,
                           ),
                           suffixIcon: IconButton(
-                            tooltip: '生成 Commit Message',
+                            tooltip: 'Generate commit message',
                             onPressed:
                                 _generatingMessage ? null : _generateMessage,
                             icon: _generatingMessage
@@ -195,18 +196,18 @@ class _CommitModalState extends State<CommitModal> {
                           children: [
                             Expanded(
                                 child: ActionButton(
-                                    label: '全部暂存', onTap: _stageAll)),
+                                    label: 'Stage all', onTap: _stageAll)),
                             const SizedBox(width: 8),
                             Expanded(
                                 child: ActionButton(
-                                    label: '取消暂存', onTap: _unstageAll)),
+                                    label: 'Unstage all', onTap: _unstageAll)),
                           ],
                         ),
                       if (_files.isNotEmpty) const SizedBox(height: 12),
                       if (_files.isEmpty)
                         Padding(
                           padding: const EdgeInsets.symmetric(vertical: 12),
-                          child: Text('当前没有可提交的变更文件',
+                          child: Text('No changed files available to commit',
                               style: TextStyle(color: Colors.grey[600])),
                         ),
                       ..._files.map((f) => _buildFileRow(context, f, isDark)),
@@ -237,8 +238,8 @@ class _CommitModalState extends State<CommitModal> {
                             const Icon(Icons.commit_rounded, size: 18),
                             const SizedBox(width: 8),
                             Text(_files.isEmpty
-                                ? '提交'
-                                : '提交 $selectedCount 个文件'),
+                                ? 'Commit'
+                                : 'Commit $selectedCount files'),
                           ],
                         ),
                       ),

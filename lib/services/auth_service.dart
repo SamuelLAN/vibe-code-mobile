@@ -100,11 +100,11 @@ class AuthService extends ChangeNotifier {
       _isLoading = false;
 
       if (e.isUnauthorized) {
-        _error = '邮箱或密码错误';
+        _error = 'Invalid email or password';
       } else if (e.isForbidden) {
-        _error = '账户已被禁用';
+        _error = 'Account has been disabled';
       } else if (e.isTooManyRequests) {
-        _error = '登录尝试过多，请稍后再试';
+        _error = 'Too many login attempts. Please try again later.';
       } else {
         _error = e.message;
       }
@@ -122,9 +122,10 @@ class AuthService extends ChangeNotifier {
           errorStr.contains('No route to host') ||
           errorStr.contains('HandshakeException') ||
           errorStr.contains('TimeoutException')) {
-        _error = '网络连接失败，请检查网络或服务器设置';
+        _error =
+            'Network connection failed. Please check your network or server settings.';
       } else {
-        _error = '网络错误: $e';
+        _error = 'Network error: $e';
       }
 
       notifyListeners();

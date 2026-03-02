@@ -66,7 +66,7 @@ class _BranchModalState extends State<BranchModal> {
           child: Column(
             children: [
               _DragHandle(),
-              _ModalHeader(title: 'Checkout 分支'),
+              _ModalHeader(title: 'Checkout Branch'),
               Padding(
                 padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
                 child: _BranchCreateCard(
@@ -88,7 +88,7 @@ class _BranchModalState extends State<BranchModal> {
                 child: TextField(
                   controller: _searchController,
                   decoration: InputDecoration(
-                    hintText: '搜索分支',
+                    hintText: 'Search branches',
                     prefixIcon: const Icon(Icons.search),
                     border: OutlineInputBorder(
                       borderRadius: BorderRadius.circular(12),
@@ -102,15 +102,15 @@ class _BranchModalState extends State<BranchModal> {
                 child: ListView(
                   children: [
                     _BranchSection(
-                      title: '本地分支',
-                      emptyLabel: '暂无本地分支',
+                      title: 'Local branches',
+                      emptyLabel: 'No local branches',
                       branches: locals,
                       currentBranch: widget.currentBranch,
                       onCheckout: widget.onCheckout,
                     ),
                     _BranchSection(
-                      title: '远程分支',
-                      emptyLabel: '暂无远程分支',
+                      title: 'Remote branches',
+                      emptyLabel: 'No remote branches',
                       branches: remotes,
                       currentBranch: widget.currentBranch,
                       onCheckout: widget.onCheckout,
@@ -178,7 +178,7 @@ class _BranchCreateCard extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           const Text(
-            '新建本地分支',
+            'Create local branch',
             style: TextStyle(fontWeight: FontWeight.w700),
           ),
           const SizedBox(height: 8),
@@ -207,7 +207,7 @@ class _BranchCreateCard extends StatelessWidget {
           TextField(
             controller: controller,
             decoration: const InputDecoration(
-              labelText: '新分支名',
+              labelText: 'New branch name',
               hintText: 'feature/xxx',
               isDense: true,
             ),
@@ -218,7 +218,7 @@ class _BranchCreateCard extends StatelessWidget {
             child: ElevatedButton.icon(
               onPressed: onCreate,
               icon: const Icon(Icons.add),
-              label: const Text('创建并切换'),
+              label: const Text('Create and checkout'),
             ),
           ),
         ],
@@ -309,7 +309,7 @@ class _BranchSection extends StatelessWidget {
                     ),
                     if (isCurrent)
                       _Pill(
-                        label: '当前',
+                        label: 'Current',
                         color: Theme.of(context).colorScheme.primary,
                       )
                     else
