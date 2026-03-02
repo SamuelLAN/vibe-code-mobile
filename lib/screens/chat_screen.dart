@@ -422,7 +422,11 @@ class _ChatScreenState extends State<ChatScreen> {
     final chat = context.read<ChatService>();
     HapticFeedback.lightImpact();
 
-    await chat.sendVoiceMessage(audioFile);
+    final attachments = List<Attachment>.from(_pendingAttachments);
+    _pendingAttachments.clear();
+    setState(() {});
+
+    await chat.sendVoiceMessage(audioFile, attachments: attachments);
     _scrollToBottom();
   }
 
@@ -442,7 +446,11 @@ class _ChatScreenState extends State<ChatScreen> {
     }
 
     final chat = context.read<ChatService>();
-    await chat.sendVoiceMessage(audioFile);
+    final attachments = List<Attachment>.from(_pendingAttachments);
+    _pendingAttachments.clear();
+    setState(() {});
+
+    await chat.sendVoiceMessage(audioFile, attachments: attachments);
     _scrollToBottom();
   }
 
@@ -719,6 +727,9 @@ class _ChatScreenState extends State<ChatScreen> {
                         ),
                       )
                     : ListView.builder(
+                        key: ValueKey<String>(
+                          'chat-list-${chat.activeChat?.id ?? 'none'}',
+                        ),
                         controller: _scrollController,
                         keyboardDismissBehavior:
                             ScrollViewKeyboardDismissBehavior.onDrag,
@@ -759,6 +770,9 @@ class _ChatScreenState extends State<ChatScreen> {
                           }
                           final message = messages[index - 1];
                           return MessageBubble(
+                            key: ValueKey<String>(
+                              '${chat.activeChat?.id ?? message.chatId}:${message.id}',
+                            ),
                             message: message,
                             audioPlayer: _audioPlayer,
                             onCopy: () {

@@ -107,11 +107,13 @@ class ChatService extends ChangeNotifier {
   }
 
   Future<void> switchProject() async {
+    stopGeneration();
     _error = null;
     _historyError = null;
     _activeChat = null;
     _messages = [];
     _chats = [];
+    await _repo.clearInMemoryMessageCache();
     _resetAllHistorySyncState();
     notifyListeners();
     await loadChats();
@@ -129,6 +131,7 @@ class ChatService extends ChangeNotifier {
 
   Future<void> selectChat(String chatId) async {
     _historyError = null;
+    await _repo.setActiveChat(chatId);
     _activeChat = _chats.firstWhere((chat) => chat.id == chatId);
     final detail = await _repo.getChatDetail(chatId);
     if (detail != null) {
@@ -251,7 +254,10 @@ class ChatService extends ChangeNotifier {
   }
 
   /// 发送语音消息并进行转写
-  Future<void> sendVoiceMessage(File audioFile) async {
+  Future<void> sendVoiceMessage(
+    File audioFile, {
+    List<Attachment> attachments = const [],
+  }) async {
     if (_activeChat == null) return;
     _error = null;
     await _ensureActiveChatReady();
@@ -317,13 +323,16 @@ class ChatService extends ChangeNotifier {
       transcriptionStatus: TranscriptionStatus.loading,
     );
 
+    final requestAttachments =
+        attachments.where((a) => a.type != AttachmentType.voice).toList();
+
     final userMessage = Message(
       id: messageId,
       chatId: _activeChat!.id,
       role: MessageRole.user,
       content: '[Voice message]', // 初始内容
       createdAt: DateTime.now(),
-      attachments: [attachment],
+      attachments: [attachment, ...requestAttachments],
     );
 
     await _repo.addMessage(userMessage);
@@ -384,11 +393,17 @@ class ChatService extends ChangeNotifier {
       // 转写完成后, 调用 AI 回复接口
       final finalText = transcribedText.toString();
       if (isTranscribeComplete && finalText.isNotEmpty) {
-        final result = await _generateAssistantResponse(finalText);
+        final result = await _generateAssistantResponse(
+          finalText,
+          attachments: requestAttachments,
+        );
         if (result == _GenerationResult.chatMissing) {
           final recreated = await _recoverMissingChat();
           if (recreated) {
-            await _generateAssistantResponse(finalText);
+            await _generateAssistantResponse(
+              finalText,
+              attachments: requestAttachments,
+            );
           }
         }
       }
@@ -582,7 +597,21 @@ class ChatService extends ChangeNotifier {
       return _GenerationResult.failed;
     }
     final projectName = await _effectiveProjectName();
-    final contentBlocks = await _buildContentBlocks(prompt, attachments);
+    List<Map<String, dynamic>> contentBlocks;
+    try {
+      contentBlocks = await _buildContentBlocks(
+        accessToken: accessToken,
+        text: prompt,
+        attachments: attachments,
+      );
+    } catch (e) {
+      _finishAssistantStream(
+        assistantMessage: assistantMessage,
+        generationId: generationId,
+        error: 'Attachment upload failed: $e',
+      );
+      return _GenerationResult.failed;
+    }
     final fallbackPrompt = prompt.trim().isNotEmpty
         ? prompt
         : 'Please answer using the attachment content.';
@@ -807,44 +836,56 @@ class ChatService extends ChangeNotifier {
     return 'Attachment message (${parts.join(', ')})';
   }
 
-  Future<List<Map<String, dynamic>>> _buildContentBlocks(
-    String text,
-    List<Attachment> attachments,
-  ) async {
+  Future<List<Map<String, dynamic>>> _buildContentBlocks({
+    required String accessToken,
+    required String text,
+    required List<Attachment> attachments,
+  }) async {
     final blocks = <Map<String, dynamic>>[];
-    final trimmed = text.trim();
-    if (trimmed.isNotEmpty) {
-      blocks.add({'type': 'text', 'text': trimmed});
-    }
 
     for (final attachment in attachments) {
+      if (attachment.type == AttachmentType.voice) {
+        continue;
+      }
       final file = File(attachment.path);
       if (!await file.exists()) {
         debugPrint('[ChatService] 附件不存在, 已跳过: ${attachment.path}');
         continue;
       }
 
-      final bytes = await file.readAsBytes();
-      final data = base64Encode(bytes);
       if (attachment.type == AttachmentType.image) {
+        final uploaded = await _codingStreamClient.uploadFile(
+          accessToken: accessToken,
+          file: file,
+          dirPath: 'images',
+        );
         blocks.add({
           'type': 'image',
           'source': {
-            'type': 'base64',
-            'media_type': attachment.mime,
-            'data': data,
+            'type': 'url',
+            'url': uploaded.cosUrl,
           },
         });
         continue;
       }
 
+      final uploaded = await _codingStreamClient.uploadFile(
+        accessToken: accessToken,
+        file: file,
+        dirPath: 'files',
+      );
       blocks.add({
         'type': 'file',
-        'source_type': 'base64',
+        'source_type': 'url',
         'name': attachment.name,
         'media_type': attachment.mime,
-        'data': data,
+        'url': uploaded.cosUrl,
       });
+    }
+
+    final trimmed = text.trim();
+    if (trimmed.isNotEmpty) {
+      blocks.add({'type': 'text', 'text': trimmed});
     }
 
     return blocks;
@@ -919,6 +960,7 @@ class ChatService extends ChangeNotifier {
 
     _activeChat = chat;
     _resetHistorySyncState(chat.id);
+    await _repo.setActiveChat(chat.id);
 
     if (previousId != null && previousId != chat.id) {
       _resetHistorySyncState(previousId);

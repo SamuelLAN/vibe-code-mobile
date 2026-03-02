@@ -420,10 +420,7 @@ class _FunctionTimelineBlockState extends State<_FunctionTimelineBlock> {
         functionName == 'search_files' && widget.item.functionResult == null;
     final canExpand = !isSearchFilesLoading;
     final showExpanded = canExpand && _expanded;
-    final showCollapsedCodeView = !showExpanded &&
-        canExpand &&
-        _shouldShowCollapsedCodeView(functionName);
-    final showBody = showExpanded || showCollapsedCodeView;
+    final showBody = showExpanded;
     final codeViewportHeight = showExpanded
         ? _expandedCodeViewportHeight
         : _collapsedCodeViewportHeight;
@@ -506,7 +503,7 @@ class _FunctionTimelineBlockState extends State<_FunctionTimelineBlock> {
               child: _buildExpandedContent(
                 widget.item,
                 widget.isDark,
-                compactCodeView: showCollapsedCodeView,
+                compactCodeView: false,
                 codeViewportHeight: codeViewportHeight,
               ),
             ),
@@ -529,10 +526,6 @@ class _FunctionTimelineBlockState extends State<_FunctionTimelineBlock> {
       return true;
     }
     return false;
-  }
-
-  bool _shouldShowCollapsedCodeView(String functionName) {
-    return functionName == 'apply_diff' || functionName == 'write_file';
   }
 
   _FunctionSummary _buildSummary(_StreamRenderItem item) {

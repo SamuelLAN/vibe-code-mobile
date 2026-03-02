@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
+import 'dart:io';
 
 import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
@@ -39,6 +40,16 @@ class ChatFlowIdsData {
   final int limit;
   final int offset;
   final bool newestFirst;
+}
+
+class UploadedCosFile {
+  UploadedCosFile({
+    required this.cosUrl,
+    required this.filename,
+  });
+
+  final String cosUrl;
+  final String filename;
 }
 
 class CodingStreamEvent {
@@ -160,6 +171,55 @@ class CodingStreamApiClient {
     if (response.statusCode != 200) {
       throw ApiException.fromResponse(response);
     }
+  }
+
+  Future<UploadedCosFile> uploadFile({
+    required String accessToken,
+    required File file,
+    String? dirPath,
+  }) async {
+    final uri = Uri.parse('$_baseUrl/vibe/coding/file/upload');
+    final request = http.MultipartRequest('POST', uri)
+      ..headers['Authorization'] = 'Bearer $accessToken'
+      ..files.add(await http.MultipartFile.fromPath('file', file.path));
+    if (dirPath != null && dirPath.trim().isNotEmpty) {
+      request.fields['dir_path'] = dirPath.trim();
+    }
+
+    final streamed = await _client.send(request);
+    final response = await http.Response.fromStream(streamed);
+    if (response.statusCode != 200) {
+      throw ApiException.fromResponse(response);
+    }
+
+    final decoded = jsonDecode(response.body);
+    if (decoded is! Map) {
+      throw ApiException(
+        statusCode: response.statusCode,
+        message: 'Invalid upload response',
+      );
+    }
+
+    final body = Map<String, dynamic>.from(decoded);
+    final dataRaw = body['data'];
+    if (dataRaw is! Map) {
+      throw ApiException(
+        statusCode: response.statusCode,
+        message: 'Upload response missing data',
+      );
+    }
+    final data = Map<String, dynamic>.from(dataRaw);
+    final cosUrl = (data['cos_url'] ?? data['url'] ?? '').toString().trim();
+    if (cosUrl.isEmpty) {
+      throw ApiException(
+        statusCode: response.statusCode,
+        message: 'Upload response missing cos_url',
+      );
+    }
+    return UploadedCosFile(
+      cosUrl: cosUrl,
+      filename: (data['filename'] ?? '').toString(),
+    );
   }
 
   Future<ChatFlowIdsData?> getChatFlowIds({

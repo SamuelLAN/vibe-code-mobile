@@ -1,7 +1,10 @@
 import 'dart:convert';
+import 'dart:io';
 
 import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
+import 'package:path/path.dart' as p;
+import 'package:path_provider/path_provider.dart';
 
 import '../apis/auth/auth_api.dart';
 import '../config/api_config.dart';
@@ -30,9 +33,11 @@ class ChatRepository {
   final Map<String, String> _serverTitleCache = {};
   final Map<String, String?> _lastPreviewCache = {};
   final Map<String, List<Message>> _messages = {};
+  String? _activeChatId;
+  Directory? _messageCacheDir;
 
   Future<void> init() async {
-    // 同步初始化，无需异步操作
+    await _ensureMessageCacheDir();
   }
 
   Future<List<Chat>> getChats() async {
@@ -209,6 +214,10 @@ class ChatRepository {
     _serverTitleCache.remove(chatId);
     _lastPreviewCache.remove(chatId);
     _messages.remove(chatId);
+    if (_activeChatId == chatId) {
+      _activeChatId = null;
+    }
+    await _deleteMessagesFromDisk(chatId);
 
     final accessToken = await _authService?.getValidToken();
     if (accessToken == null) return;
@@ -266,31 +275,44 @@ class ChatRepository {
   }
 
   Future<List<Message>> getMessages(String chatId) async {
-    return List.from(_messages[chatId] ?? []);
+    if (_activeChatId != chatId) {
+      return await _loadMessagesForInactiveChat(chatId);
+    }
+
+    await _ensureMessagesLoaded(chatId);
+    return List<Message>.from(_messages[chatId] ?? const <Message>[]);
   }
 
   Future<void> deleteMessage(String chatId, String messageId) async {
+    await _ensureActiveForMutation(chatId);
     final messages = _messages[chatId];
     if (messages == null) return;
     messages.removeWhere((m) => m.id == messageId);
+    await _persistMessages(chatId);
   }
 
   Future<void> addMessage(Message message) async {
+    await _ensureActiveForMutation(message.chatId);
     _messages.putIfAbsent(message.chatId, () => []);
     _messages[message.chatId]!.add(message);
+    await _persistMessages(message.chatId);
   }
 
   Future<void> replaceMessages(String chatId, List<Message> messages) async {
+    await _ensureActiveForMutation(chatId);
     _messages[chatId] = List<Message>.from(messages);
+    await _persistMessages(chatId);
   }
 
   Future<void> updateMessage(Message message) async {
+    await _ensureActiveForMutation(message.chatId);
     final messages = _messages[message.chatId];
     if (messages == null) return;
 
     final index = messages.indexWhere((m) => m.id == message.id);
     if (index != -1) {
       messages[index] = message;
+      await _persistMessages(message.chatId);
     }
   }
 
@@ -310,6 +332,7 @@ class ChatRepository {
           detail.lastMessagePreview = localPreview;
         }
         _chatCache[detail.id] = detail;
+        await setActiveChat(detail.id);
         _messages.putIfAbsent(detail.id, () => _messages[chat.id] ?? []);
         return detail;
       }
@@ -341,7 +364,21 @@ class ChatRepository {
     } else {
       _messages.putIfAbsent(created.id, () => []);
     }
+    await _persistMessages(created.id);
     return created;
+  }
+
+  Future<void> setActiveChat(String chatId) async {
+    if (_activeChatId == chatId && _messages.containsKey(chatId)) return;
+    await _persistAndEvictOtherChats(keepChatId: chatId);
+    await _ensureMessagesLoaded(chatId);
+    _activeChatId = chatId;
+  }
+
+  Future<void> clearInMemoryMessageCache() async {
+    await _persistAndEvictOtherChats();
+    _messages.clear();
+    _activeChatId = null;
   }
 
   void dispose() {
@@ -492,5 +529,85 @@ class ChatRepository {
       return selected.trim();
     }
     return _defaultProjectName;
+  }
+
+  Future<Directory> _ensureMessageCacheDir() async {
+    if (_messageCacheDir != null) {
+      return _messageCacheDir!;
+    }
+    final root = await getTemporaryDirectory();
+    final dir = Directory(p.join(root.path, 'chat_message_cache'));
+    if (!await dir.exists()) {
+      await dir.create(recursive: true);
+    }
+    _messageCacheDir = dir;
+    return dir;
+  }
+
+  Future<String> _messageCachePath(String chatId) async {
+    final dir = await _ensureMessageCacheDir();
+    return p.join(dir.path, '${Uri.encodeComponent(chatId)}.json');
+  }
+
+  Future<void> _persistAndEvictOtherChats({String? keepChatId}) async {
+    final ids = _messages.keys.toList();
+    for (final id in ids) {
+      if (keepChatId != null && id == keepChatId) continue;
+      await _persistMessages(id);
+      _messages.remove(id);
+    }
+  }
+
+  Future<void> _ensureMessagesLoaded(String chatId) async {
+    if (_messages.containsKey(chatId)) return;
+    final loaded = await _readMessagesFromDisk(chatId);
+    _messages[chatId] = loaded;
+  }
+
+  Future<List<Message>> _loadMessagesForInactiveChat(String chatId) async {
+    final loaded = await _readMessagesFromDisk(chatId);
+    return List<Message>.from(loaded);
+  }
+
+  Future<void> _ensureActiveForMutation(String chatId) async {
+    if (_activeChatId == chatId && _messages.containsKey(chatId)) return;
+    await setActiveChat(chatId);
+  }
+
+  Future<void> _persistMessages(String chatId) async {
+    final messages = _messages[chatId] ?? const <Message>[];
+    final path = await _messageCachePath(chatId);
+    final file = File(path);
+    final payload = jsonEncode(messages.map((m) => m.toMap()).toList());
+    await file.writeAsString(payload, flush: true);
+  }
+
+  Future<List<Message>> _readMessagesFromDisk(String chatId) async {
+    final path = await _messageCachePath(chatId);
+    final file = File(path);
+    if (!await file.exists()) {
+      return <Message>[];
+    }
+    try {
+      final raw = await file.readAsString();
+      if (raw.trim().isEmpty) return <Message>[];
+      final decoded = jsonDecode(raw);
+      if (decoded is! List) return <Message>[];
+      return decoded
+          .whereType<Map>()
+          .map((e) => Message.fromMap(Map<String, dynamic>.from(e)))
+          .toList();
+    } catch (e) {
+      debugPrint('[ChatRepository] failed to read cached messages: $e');
+      return <Message>[];
+    }
+  }
+
+  Future<void> _deleteMessagesFromDisk(String chatId) async {
+    final path = await _messageCachePath(chatId);
+    final file = File(path);
+    if (await file.exists()) {
+      await file.delete();
+    }
   }
 }

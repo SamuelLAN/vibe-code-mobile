@@ -46,6 +46,34 @@ class StreamElement {
     );
   }
 
+  Map<String, dynamic> toMap() => {
+        'id': id,
+        'type': type.name,
+        'content': content,
+        'isComplete': isComplete,
+        'metadata': metadata,
+      };
+
+  static StreamElement fromMap(Map<String, dynamic> map) {
+    final typeText = map['type']?.toString() ?? StreamElementType.text.name;
+    final type = StreamElementType.values.firstWhere(
+      (e) => e.name == typeText,
+      orElse: () => StreamElementType.text,
+    );
+    final metadata = map['metadata'];
+    return StreamElement(
+      id: map['id']?.toString() ?? generateStreamElementId(),
+      type: type,
+      content: map['content']?.toString() ?? '',
+      isComplete: map['isComplete'] == true,
+      metadata: metadata is Map<String, dynamic>
+          ? metadata
+          : (metadata is Map
+              ? metadata.map((k, v) => MapEntry(k.toString(), v))
+              : null),
+    );
+  }
+
   @override
   String toString() => jsonEncode({
         'id': id,
