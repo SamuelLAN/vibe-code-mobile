@@ -15,6 +15,7 @@ import '../services/audio_recorder_service.dart';
 import '../services/auth_service.dart';
 import '../services/chat_service.dart';
 import '../services/permission_service.dart';
+import '../services/settings_service.dart';
 import '../widgets/attachment_tray.dart';
 import '../widgets/input_bar.dart';
 import '../widgets/message_bubble.dart';
@@ -29,6 +30,12 @@ class ChatScreen extends StatefulWidget {
 }
 
 class _ChatScreenState extends State<ChatScreen> {
+  static const List<String> _defaultProjects = <String>[
+    'plutux-board',
+    'vibe-code-mobile',
+  ];
+  static const String _addProjectValue = '__add_project__';
+
   final TextEditingController _textController = TextEditingController();
   final ScrollController _scrollController = ScrollController();
   final List<Attachment> _pendingAttachments = [];
@@ -36,14 +43,17 @@ class _ChatScreenState extends State<ChatScreen> {
   final AudioRecorderService _audioRecorder = AudioRecorderService();
   final AudioPlayerService _audioPlayer = AudioPlayerService();
   final PermissionService _permissionService = PermissionService();
+  late final List<String> _projects = List<String>.from(_defaultProjects);
   InputMode _inputMode = InputMode.voice;
   bool _isFullscreenInput = false;
+  String _selectedProject = _defaultProjects.first;
 
   @override
   void initState() {
     super.initState();
     _audioPlayer.init();
     _scrollController.addListener(_handleHistoryPaginationScroll);
+    _loadProjectSelection();
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _warmupMicrophonePermission();
     });
@@ -76,6 +86,144 @@ class _ChatScreenState extends State<ChatScreen> {
     } catch (e) {
       debugPrint('预请求麦克风权限失败: $e');
     }
+  }
+
+  Future<void> _loadProjectSelection() async {
+    final settings = context.read<SettingsService>();
+    final selected = await settings.getSelectedProjectName();
+    if (selected == null || selected.trim().isEmpty) {
+      await _selectProject(_selectedProject, refreshChats: false);
+      return;
+    }
+    await _selectProject(selected.trim(), refreshChats: true);
+  }
+
+  String _repoPathForProject(String projectName) {
+    switch (projectName) {
+      case 'plutux-board':
+        return '/Users/samuel/Documents/github/plutux-board';
+      case 'vibe-code-mobile':
+        return '/Users/samuel/Documents/github/vibe-code-mobile';
+      default:
+        return '/Users/samuel/Documents/github/$projectName';
+    }
+  }
+
+  Future<void> _selectProject(
+    String projectName, {
+    bool refreshChats = true,
+  }) async {
+    if (!_projects.contains(projectName)) {
+      _projects.add(projectName);
+    }
+    final settings = context.read<SettingsService>();
+    await settings.setSelectedProjectName(projectName);
+    await settings.setGitRepoPath(_repoPathForProject(projectName));
+    if (refreshChats) {
+      await context.read<ChatService>().switchProject();
+    }
+    if (!mounted) return;
+    setState(() {
+      _selectedProject = projectName;
+    });
+  }
+
+  String? _projectNameFromGitHubUrl(String url) {
+    final input = url.trim();
+    if (input.isEmpty) return null;
+
+    if (input.startsWith('git@github.com:')) {
+      final repoPath = input.substring('git@github.com:'.length);
+      final segments = repoPath.split('/');
+      if (segments.length >= 2) {
+        return segments[1].replaceAll('.git', '').trim();
+      }
+      return null;
+    }
+
+    final uri = Uri.tryParse(input);
+    if (uri == null || !uri.host.toLowerCase().contains('github.com')) {
+      return null;
+    }
+    if (uri.pathSegments.length < 2) return null;
+    final repo = uri.pathSegments[1].replaceAll('.git', '').trim();
+    return repo.isEmpty ? null : repo;
+  }
+
+  Future<void> _showAddProjectSheet() async {
+    final controller = TextEditingController();
+    await showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      builder: (context) => Padding(
+        padding: EdgeInsets.only(
+          left: 16,
+          right: 16,
+          top: 20,
+          bottom: MediaQuery.of(context).viewInsets.bottom + 20,
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              '添加 Project',
+              style: Theme.of(context)
+                  .textTheme
+                  .titleMedium
+                  ?.copyWith(fontWeight: FontWeight.w600),
+            ),
+            const SizedBox(height: 12),
+            TextField(
+              controller: controller,
+              decoration: const InputDecoration(
+                labelText: 'GitHub 地址',
+                hintText: 'https://github.com/owner/repo',
+                prefixIcon: Icon(Icons.link),
+              ),
+              autofocus: true,
+            ),
+            const SizedBox(height: 14),
+            Row(
+              children: [
+                Expanded(
+                  child: OutlinedButton(
+                    onPressed: () => Navigator.of(context).pop(),
+                    child: const Text('取消'),
+                  ),
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: ElevatedButton(
+                    onPressed: () async {
+                      final projectName =
+                          _projectNameFromGitHubUrl(controller.text);
+                      if (projectName == null) {
+                        if (!context.mounted) return;
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(content: Text('请输入有效的 GitHub 地址')),
+                        );
+                        return;
+                      }
+
+                      if (!_projects.contains(projectName)) {
+                        _projects.add(projectName);
+                      }
+                      await _selectProject(projectName);
+
+                      if (!context.mounted) return;
+                      Navigator.of(context).pop();
+                    },
+                    child: const Text('添加'),
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+    controller.dispose();
   }
 
   Future<void> _sendMessage() async {
@@ -384,7 +532,7 @@ class _ChatScreenState extends State<ChatScreen> {
     final messages = chat.messages;
 
     return Scaffold(
-      drawer: const GitDrawer(),
+      drawer: GitDrawer(projectName: _selectedProject),
       endDrawer: const ChatListDrawer(),
       appBar: AppBar(
         leading: Builder(
@@ -393,7 +541,59 @@ class _ChatScreenState extends State<ChatScreen> {
             onPressed: () => Scaffold.of(context).openDrawer(),
           ),
         ),
-        title: Text(chat.activeChat?.title ?? 'Vibe Coding'),
+        title: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            DropdownButtonHideUnderline(
+              child: DropdownButton<String>(
+                isDense: true,
+                value: _selectedProject,
+                icon: const Icon(Icons.keyboard_arrow_down),
+                items: [
+                  ..._projects.map(
+                    (project) => DropdownMenuItem<String>(
+                      value: project,
+                      child: Text(
+                        project,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(
+                          fontSize: 15,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    ),
+                  ),
+                  const DropdownMenuItem<String>(
+                    value: _addProjectValue,
+                    child: Text('+ 添加 Project'),
+                  ),
+                ],
+                onChanged: (value) async {
+                  if (value == null) return;
+                  if (value == _addProjectValue) {
+                    await _showAddProjectSheet();
+                    return;
+                  }
+                  await _selectProject(value);
+                },
+              ),
+            ),
+            const SizedBox(height: 2),
+            Text(
+              chat.activeChat?.title ?? 'Vibe Coding',
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: TextStyle(
+                fontSize: 11,
+                color: Theme.of(context)
+                    .colorScheme
+                    .onSurface
+                    .withValues(alpha: 0.55),
+                fontWeight: FontWeight.w400,
+              ),
+            ),
+          ],
+        ),
         actions: [
           Builder(
             builder: (context) => IconButton(
@@ -412,6 +612,40 @@ class _ChatScreenState extends State<ChatScreen> {
         onTap: _dismissKeyboard,
         child: Column(
           children: [
+            if (chat.historyError != null &&
+                chat.historyError!.trim().isNotEmpty)
+              Container(
+                width: double.infinity,
+                margin: const EdgeInsets.fromLTRB(12, 8, 12, 0),
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                decoration: BoxDecoration(
+                  color: Theme.of(context).colorScheme.errorContainer,
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                child: Row(
+                  children: [
+                    Expanded(
+                      child: Text(
+                        chat.historyError!,
+                        style: TextStyle(
+                          color: Theme.of(context).colorScheme.onErrorContainer,
+                          fontSize: 12,
+                        ),
+                      ),
+                    ),
+                    IconButton(
+                      onPressed: () => chat.clearHistoryError(),
+                      visualDensity: VisualDensity.compact,
+                      icon: Icon(
+                        Icons.close,
+                        color: Theme.of(context).colorScheme.onErrorContainer,
+                        size: 18,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
             if (!_isFullscreenInput)
               Expanded(
                 child: messages.isEmpty

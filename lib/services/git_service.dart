@@ -338,7 +338,7 @@ class GitService extends ChangeNotifier {
       '/vibe/git/change/commit/generate-message',
       body: {
         'project_name': effectiveProjectName,
-        if (filePaths != null && filePaths.isNotEmpty) 'file_paths': filePaths,
+        if (filePaths != null) 'file_paths': filePaths,
       },
     );
     if (!response.success) throw Exception(response.message);
@@ -435,7 +435,7 @@ class GitService extends ChangeNotifier {
     );
   }
 
-  Future<List<String>> getBranches({
+  Future<List<GitBranchRef>> getBranchRefs({
     String? projectName,
   }) async {
     final effectiveProjectName = await _effectiveProjectName(projectName);
@@ -446,26 +446,81 @@ class GitService extends ChangeNotifier {
     );
     if (!response.success) throw Exception(response.message);
     final payload = _payload(response.details);
-    if (payload is List) return _parseBranchNames(payload);
+    if (payload is List) return _parseBranchRefs(payload);
     if (payload is Map<String, dynamic>) {
+      final localItems =
+          _readList(payload, ['local_branches', 'locals', 'heads']);
+      final remoteItems =
+          _readList(payload, ['remote_branches', 'remotes', 'tracking']);
+      if (localItems.isNotEmpty || remoteItems.isNotEmpty) {
+        return _mergeBranchRefs(
+          local:
+              _parseBranchRefs(localItems, preferredType: GitBranchType.local),
+          remote: _parseBranchRefs(remoteItems,
+              preferredType: GitBranchType.remote),
+        );
+      }
+
       final items = _readList(payload, ['branches', 'items']);
-      return _parseBranchNames(items);
+      return _parseBranchRefs(items);
     }
-    return <String>[];
+    return <GitBranchRef>[];
+  }
+
+  Future<List<String>> getBranches({
+    String? projectName,
+  }) async {
+    final refs = await getBranchRefs(projectName: projectName);
+    return refs
+        .where((item) => item.type == GitBranchType.local)
+        .map((item) => item.name)
+        .toSet()
+        .toList();
   }
 
   Future<GitOperationResult> checkout({
     required String branch,
+    bool createBranch = false,
+    String? startPoint,
     String? projectName,
   }) async {
     final effectiveProjectName = await _effectiveProjectName(projectName);
-    return _post(
-      '/vibe/git/advanced/checkout',
-      body: {
+    final normalizedStartPoint = startPoint?.trim();
+    final shouldCreate = createBranch || (normalizedStartPoint != null);
+    final payloads = <Map<String, dynamic>>[
+      {
         'project_name': effectiveProjectName,
         'branch': branch,
+        if (shouldCreate) 'create_branch': true,
+        if (normalizedStartPoint != null && normalizedStartPoint.isNotEmpty)
+          'start_point': normalizedStartPoint,
       },
-    );
+      {
+        'project_name': effectiveProjectName,
+        'branch': branch,
+        if (shouldCreate) 'create': true,
+        if (normalizedStartPoint != null && normalizedStartPoint.isNotEmpty)
+          'from_ref': normalizedStartPoint,
+      },
+      {
+        'project_name': effectiveProjectName,
+        'target_branch': branch,
+        if (shouldCreate) 'new_branch': true,
+        if (normalizedStartPoint != null && normalizedStartPoint.isNotEmpty)
+          'from_branch': normalizedStartPoint,
+      },
+    ];
+
+    GitOperationResult? firstFailure;
+    for (final body in payloads) {
+      final result = await _post('/vibe/git/advanced/checkout', body: body);
+      if (result.success) return result;
+      firstFailure ??= result;
+      if (!shouldCreate) break;
+    }
+
+    return firstFailure ??
+        GitOperationResult(success: false, message: 'Git operation failed.');
   }
 
   Future<List<GitCommit>> log({
@@ -538,14 +593,48 @@ class GitService extends ChangeNotifier {
     bool includeUntracked = true,
   }) async {
     final effectiveProjectName = await _effectiveProjectName(projectName);
-    return _post(
-      '/vibe/git/worktree/discard',
-      body: {
+    final normalized = filePath.replaceAll('\\', '/').trim();
+    final pathCandidates = <String>{
+      normalized,
+      if (normalized.startsWith('./')) normalized.substring(2),
+      if (normalized.startsWith('/')) normalized.substring(1),
+    }.where((p) => p.isNotEmpty).toList();
+
+    final payloads = <Map<String, dynamic>>[];
+    for (final path in pathCandidates) {
+      payloads.add({
         'project_name': effectiveProjectName,
-        'file_paths': [filePath],
+        'file_paths': [path],
         'include_untracked': includeUntracked,
-      },
-    );
+      });
+      payloads.add({
+        'project_name': effectiveProjectName,
+        'file_path': path,
+        'include_untracked': includeUntracked,
+      });
+      payloads.add({
+        'project_name': effectiveProjectName,
+        'path': path,
+        'include_untracked': includeUntracked,
+      });
+      payloads.add({
+        'project_name': effectiveProjectName,
+        'paths': [path],
+        'include_untracked': includeUntracked,
+      });
+    }
+
+    GitOperationResult? firstFailure;
+    for (final body in payloads) {
+      final result = await _post('/vibe/git/worktree/discard', body: body);
+      if (result.success) return result;
+      firstFailure ??= result;
+    }
+    return firstFailure ??
+        GitOperationResult(
+          success: false,
+          message: 'Git operation failed.',
+        );
   }
 
   Future<GitFileDiff> getFileDiff({
@@ -862,12 +951,16 @@ class GitService extends ChangeNotifier {
         .toList();
   }
 
-  List<String> _parseBranchNames(List<dynamic> raw) {
-    final names = <String>[];
+  List<GitBranchRef> _parseBranchRefs(
+    List<dynamic> raw, {
+    GitBranchType? preferredType,
+  }) {
+    final refs = <GitBranchRef>[];
     for (final item in raw) {
       if (item is String) {
         final value = item.trim();
-        if (value.isNotEmpty) names.add(value);
+        if (value.isEmpty) continue;
+        refs.add(_branchRefFromRawValue(value, preferredType: preferredType));
         continue;
       }
       if (item is Map<String, dynamic>) {
@@ -875,12 +968,86 @@ class GitService extends ChangeNotifier {
           item,
           const ['name', 'branch', 'branch_name', 'ref', 'display_name'],
         );
-        if (value != null && value.trim().isNotEmpty) {
-          names.add(value.trim());
-        }
+        if (value == null || value.trim().isEmpty) continue;
+
+        final fullName = _readOptionalString(
+              item,
+              const ['full_name', 'full_ref', 'ref_name', 'qualified_name'],
+            ) ??
+            value.trim();
+        final remoteName = _readOptionalString(
+          item,
+          const ['remote', 'remote_name', 'upstream_remote'],
+        );
+        final isRemote = _readBool(
+              item,
+              const ['is_remote', 'remote_branch', 'tracking'],
+            ) ??
+            fullName.contains('/');
+        final type = preferredType ??
+            (isRemote ? GitBranchType.remote : GitBranchType.local);
+        refs.add(
+          GitBranchRef(
+            type: type,
+            name: _displayBranchName(fullName, type: type),
+            fullName: fullName,
+            remoteName: remoteName ?? _inferRemoteName(fullName, type: type),
+          ),
+        );
       }
     }
-    return names.toSet().toList();
+    return _dedupeBranchRefs(refs);
+  }
+
+  GitBranchRef _branchRefFromRawValue(
+    String raw, {
+    GitBranchType? preferredType,
+  }) {
+    final fullName = raw.trim();
+    final type = preferredType ??
+        (fullName.contains('/') ? GitBranchType.remote : GitBranchType.local);
+    return GitBranchRef(
+      type: type,
+      name: _displayBranchName(fullName, type: type),
+      fullName: fullName,
+      remoteName: _inferRemoteName(fullName, type: type),
+    );
+  }
+
+  String _displayBranchName(String ref, {required GitBranchType type}) {
+    if (type == GitBranchType.remote) {
+      final slashIndex = ref.indexOf('/');
+      if (slashIndex > 0 && slashIndex + 1 < ref.length) {
+        return ref.substring(slashIndex + 1);
+      }
+    }
+    return ref;
+  }
+
+  String? _inferRemoteName(String ref, {required GitBranchType type}) {
+    if (type != GitBranchType.remote) return null;
+    final slashIndex = ref.indexOf('/');
+    if (slashIndex <= 0) return null;
+    return ref.substring(0, slashIndex);
+  }
+
+  List<GitBranchRef> _mergeBranchRefs({
+    required List<GitBranchRef> local,
+    required List<GitBranchRef> remote,
+  }) {
+    return _dedupeBranchRefs([...local, ...remote]);
+  }
+
+  List<GitBranchRef> _dedupeBranchRefs(List<GitBranchRef> refs) {
+    final seen = <String>{};
+    final result = <GitBranchRef>[];
+    for (final ref in refs) {
+      final key = '${ref.type.name}:${ref.fullName}';
+      if (seen.add(key)) {
+        result.add(ref);
+      }
+    }
+    return result;
   }
 
   GitFileDiff _parseFileDiff(String? raw, {required String filePath}) {
@@ -1048,6 +1215,14 @@ class GitService extends ChangeNotifier {
     return null;
   }
 
+  bool? _readBool(Map<String, dynamic> map, List<String> keys) {
+    for (final key in keys) {
+      final value = _nullableBool(map[key]);
+      if (value != null) return value;
+    }
+    return null;
+  }
+
   int _readInt(Map<String, dynamic> map, List<String> keys,
       {required int fallback}) {
     for (final key in keys) {
@@ -1068,6 +1243,21 @@ class GitService extends ChangeNotifier {
     if (value == null) return null;
     if (value is String) return value;
     return value.toString();
+  }
+
+  bool? _nullableBool(dynamic value) {
+    if (value is bool) return value;
+    if (value is num) return value != 0;
+    if (value is String) {
+      final lowered = value.trim().toLowerCase();
+      if (lowered == 'true' || lowered == '1' || lowered == 'yes') {
+        return true;
+      }
+      if (lowered == 'false' || lowered == '0' || lowered == 'no') {
+        return false;
+      }
+    }
+    return null;
   }
 
   DateTime _parseDate(String? value) {

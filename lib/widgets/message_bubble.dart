@@ -306,7 +306,8 @@ class _AssistantMessageContent extends StatelessWidget {
 
     final functionName = element.metadata?['functionName']?.toString() ??
         _tryParseJson(element.content)?['name']?.toString();
-    return functionName == 'save_to_shared_memory';
+    return functionName == 'save_to_shared_memory' ||
+        functionName == 'pass_coding_mind_map';
   }
 
   Widget _buildRenderItem(_StreamRenderItem item) {
@@ -3404,6 +3405,9 @@ class _PreCodeBlockBuilder extends MarkdownElementBuilder {
     final functionName = parsed?['name']?.toString();
 
     if (functionName == 'save_to_shared_memory') {
+      return const SizedBox.shrink();
+    }
+    if (functionName == 'pass_coding_mind_map') {
       return const SizedBox.shrink();
     }
 

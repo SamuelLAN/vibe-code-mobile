@@ -42,6 +42,27 @@ class GitSummary {
   final int runningTaskCount;
 }
 
+enum GitBranchType {
+  local,
+  remote,
+}
+
+class GitBranchRef {
+  GitBranchRef({
+    required this.type,
+    required this.name,
+    required this.fullName,
+    this.remoteName,
+  });
+
+  final GitBranchType type;
+  final String name;
+  final String fullName;
+  final String? remoteName;
+
+  bool get isRemote => type == GitBranchType.remote;
+}
+
 class GitPushSummary {
   GitPushSummary({
     required this.branch,

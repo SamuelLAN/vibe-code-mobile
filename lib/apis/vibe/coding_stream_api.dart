@@ -180,7 +180,11 @@ class CodingStreamApiClient {
     final dataRaw = map['data'];
     if (dataRaw is! Map) return null;
     final data = Map<String, dynamic>.from(dataRaw);
-    final itemsRaw = data['items'];
+    final itemsRaw = data['items'] ??
+        data['flow_ids'] ??
+        data['flowIds'] ??
+        data['list'] ??
+        data['ids'];
     final items = itemsRaw is List
         ? itemsRaw.map((e) => e.toString()).where((e) => e.isNotEmpty).toList()
         : const <String>[];
@@ -214,7 +218,8 @@ class CodingStreamApiClient {
     final map = Map<String, dynamic>.from(decoded);
     final dataRaw = map['data'];
     if (dataRaw is! Map) return FlowStatus.unknown;
-    final statusText = (dataRaw['status'] ?? '').toString().trim().toLowerCase();
+    final statusText =
+        (dataRaw['status'] ?? '').toString().trim().toLowerCase();
     return switch (statusText) {
       'done' => FlowStatus.done,
       'user_interaction' => FlowStatus.userInteraction,

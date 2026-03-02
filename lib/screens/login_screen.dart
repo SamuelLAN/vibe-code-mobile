@@ -13,16 +13,10 @@ class LoginScreen extends StatefulWidget {
 }
 
 class _LoginScreenState extends State<LoginScreen> {
-  static const List<String> _projects = <String>[
-    'plutux-board',
-    'vibe-code-mobile',
-  ];
-
   final _formKey = GlobalKey<FormState>();
   final TextEditingController _emailController = TextEditingController();
   final TextEditingController _passwordController = TextEditingController();
   bool _obscure = true;
-  String _selectedProject = 'plutux-board';
 
   @override
   void dispose() {
@@ -40,8 +34,6 @@ class _LoginScreenState extends State<LoginScreen> {
       password: _passwordController.text,
     );
     if (success) {
-      await settings.setSelectedProjectName(_selectedProject);
-      await settings.setGitRepoPath(_repoPathForProject(_selectedProject));
       final token = auth.accessToken;
       if (token != null && token.isNotEmpty) {
         await settings.setGitToken(token);
@@ -83,16 +75,6 @@ class _LoginScreenState extends State<LoginScreen> {
           duration: const Duration(seconds: 5),
         ),
       );
-    }
-  }
-
-  String _repoPathForProject(String projectName) {
-    switch (projectName) {
-      case 'plutux-board':
-        return '/Users/samuel/Documents/github/plutux-board';
-      case 'vibe-code-mobile':
-      default:
-        return '/Users/samuel/Documents/github/vibe-code-mobile';
     }
   }
 
@@ -203,30 +185,6 @@ class _LoginScreenState extends State<LoginScreen> {
                               ? 'Password is required'
                               : null,
                           onFieldSubmitted: (_) => _submit(),
-                        ),
-                        const SizedBox(height: 16),
-                        DropdownButtonFormField<String>(
-                          initialValue: _selectedProject,
-                          decoration: const InputDecoration(
-                            labelText: 'Project',
-                            prefixIcon: Icon(Icons.folder_outlined),
-                          ),
-                          items: _projects
-                              .map(
-                                (project) => DropdownMenuItem<String>(
-                                  value: project,
-                                  child: Text(project),
-                                ),
-                              )
-                              .toList(),
-                          onChanged: auth.isLoading
-                              ? null
-                              : (value) {
-                                  if (value == null) return;
-                                  setState(() {
-                                    _selectedProject = value;
-                                  });
-                                },
                         ),
                         const SizedBox(height: 16),
                         ElevatedButton(

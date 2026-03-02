@@ -11,7 +11,12 @@ import 'enums.dart';
 import 'modals/modals.dart';
 
 class GitDrawer extends StatefulWidget {
-  const GitDrawer({super.key});
+  const GitDrawer({
+    super.key,
+    required this.projectName,
+  });
+
+  final String projectName;
 
   @override
   State<GitDrawer> createState() => _GitDrawerState();
@@ -37,7 +42,7 @@ class _GitDrawerState extends State<GitDrawer> {
   GitPushSummary? _pushPreview;
   GitRunStatus _runStatus = GitRunStatus(runningTaskCount: 0, tasks: []);
   GitWorktreeStatus _worktree = GitWorktreeStatus(files: const []);
-  List<String> _branches = const [];
+  List<GitBranchRef> _branches = const [];
   List<GitCommit> _logCommits = const [];
   List<GitCommit> _resetCandidates = const [];
   bool _initialLoading = true;
@@ -53,6 +58,14 @@ class _GitDrawerState extends State<GitDrawer> {
   void initState() {
     super.initState();
     unawaited(_refreshSliderData(initial: true));
+  }
+
+  @override
+  void didUpdateWidget(covariant GitDrawer oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.projectName != widget.projectName) {
+      unawaited(_refreshSliderData());
+    }
   }
 
   Future<void> _refreshSliderData({bool initial = false}) async {
@@ -1378,7 +1391,7 @@ class _GitDrawerState extends State<GitDrawer> {
 
   Future<void> _showBranchModal(BuildContext context) async {
     try {
-      final branches = await _git.getBranches();
+      final branches = await _git.getBranchRefs();
       if (!mounted) return;
       setState(() => _branches = branches);
     } catch (e) {
@@ -1396,12 +1409,26 @@ class _GitDrawerState extends State<GitDrawer> {
       builder: (context) => BranchModal(
         branches: _branches,
         currentBranch: currentBranch,
-        onSelect: (branch) async {
+        onCheckout: (branch) async {
           Navigator.pop(context);
           await _runGitOperation(
-            action: () => _git.checkout(branch: branch),
+            action: () => _git.checkout(branch: branch.fullName),
             currentStatus: GitOpStatus.idle,
-            successFallback: '已切换到分支 $branch',
+            successFallback:
+                '已切换到分支 ${branch.isRemote ? branch.fullName : branch.name}',
+            setStatus: (_) {},
+          );
+        },
+        onCreateLocalBranch: (newBranchName, fromBranch) async {
+          Navigator.pop(context);
+          await _runGitOperation(
+            action: () => _git.checkout(
+              branch: newBranchName,
+              createBranch: true,
+              startPoint: fromBranch.fullName,
+            ),
+            currentStatus: GitOpStatus.idle,
+            successFallback: '已创建并切换到分支 $newBranchName',
             setStatus: (_) {},
           );
         },

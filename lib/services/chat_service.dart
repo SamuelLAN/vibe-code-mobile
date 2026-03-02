@@ -46,6 +46,7 @@ class ChatService extends ChangeNotifier {
   List<Message> _messages = [];
   bool _isGenerating = false;
   String? _error;
+  String? _historyError;
   Timer? _streamTimer;
   String? _currentFlowId;
   String? _activeGenerationId;
@@ -66,6 +67,7 @@ class ChatService extends ChangeNotifier {
   List<Message> get messages => _messages;
   bool get isGenerating => _isGenerating;
   String? get error => _error;
+  String? get historyError => _historyError;
   bool get isLoadingOlderHistory => _isLoadingOlderHistory;
   bool get hasMoreHistory {
     final chatId = _activeChat?.id;
@@ -93,6 +95,17 @@ class ChatService extends ChangeNotifier {
     await selectChat(_chats.first.id);
   }
 
+  Future<void> switchProject() async {
+    _error = null;
+    _historyError = null;
+    _activeChat = null;
+    _messages = [];
+    _chats = [];
+    _resetAllHistorySyncState();
+    notifyListeners();
+    await loadChats();
+  }
+
   Future<void> refreshChats() async {
     _chats = await _repo.getChats();
     if (_activeChat != null) {
@@ -104,6 +117,7 @@ class ChatService extends ChangeNotifier {
   }
 
   Future<void> selectChat(String chatId) async {
+    _historyError = null;
     _activeChat = _chats.firstWhere((chat) => chat.id == chatId);
     final detail = await _repo.getChatDetail(chatId);
     if (detail != null) {
@@ -128,6 +142,7 @@ class ChatService extends ChangeNotifier {
     if (accessToken == null) return;
 
     _isLoadingOlderHistory = true;
+    _historyError = null;
     notifyListeners();
     try {
       await _loadNextFlowBatch(
@@ -925,6 +940,7 @@ class ChatService extends ChangeNotifier {
     if (accessToken == null) return;
 
     try {
+      _historyError = null;
       final latestSignature = await _latestFlowSignature(
         chatId: chatId,
         accessToken: accessToken,
@@ -959,7 +975,9 @@ class ChatService extends ChangeNotifier {
       await _updateChatPreviewFromMessages(chatId);
     } catch (e) {
       debugPrint('[ChatService] load remote history failed for $chatId: $e');
+      _historyError = '历史消息加载失败: $e';
       _historyLoadedChatIds.add(chatId);
+      notifyListeners();
     }
   }
 
@@ -985,6 +1003,7 @@ class ChatService extends ChangeNotifier {
     final selectedFlowIds = known.sublist(loadedCount, end);
     final loadedMessages = <Message>[];
     final seenSignatures = <String>{};
+    final failedFlowIds = <String>[];
 
     for (final flowId in selectedFlowIds) {
       try {
@@ -1005,6 +1024,7 @@ class ChatService extends ChangeNotifier {
         }
       } catch (e) {
         debugPrint('[ChatService] load flow history failed for $flowId: $e');
+        failedFlowIds.add(flowId);
       }
     }
 
@@ -1012,6 +1032,17 @@ class ChatService extends ChangeNotifier {
     final merged = _mergeMessagesChronologically(existing, loadedMessages);
     await _repo.replaceMessages(chatId, merged);
     _loadedFlowCountByChat[chatId] = end;
+
+    if (failedFlowIds.isNotEmpty) {
+      _historyError = '历史 flow 加载失败: ${failedFlowIds.join(', ')}';
+      notifyListeners();
+      return;
+    }
+
+    if (selectedFlowIds.isNotEmpty && loadedMessages.isEmpty) {
+      _historyError = '已请求历史 flow，但未解析到可展示的消息数据';
+      notifyListeners();
+    }
   }
 
   Future<void> _ensureFlowIdsAvailable({
@@ -1051,7 +1082,8 @@ class ChatService extends ChangeNotifier {
     final normalized = data.newestFirst
         ? List<String>.from(data.items)
         : data.items.reversed.toList();
-    final known = _knownFlowIdsNewestByChat.putIfAbsent(chatId, () => <String>[]);
+    final known =
+        _knownFlowIdsNewestByChat.putIfAbsent(chatId, () => <String>[]);
     final knownSet = known.toSet();
     for (final flowId in normalized) {
       if (knownSet.add(flowId)) {
@@ -1125,6 +1157,21 @@ class ChatService extends ChangeNotifier {
     _flowIdOffsetByChat.remove(chatId);
     _flowIdsExhaustedChats.remove(chatId);
     _loadedFlowCountByChat.remove(chatId);
+  }
+
+  void _resetAllHistorySyncState() {
+    _historyLoadedChatIds.clear();
+    _lastSyncedFlowSignatureByChat.clear();
+    _knownFlowIdsNewestByChat.clear();
+    _flowIdOffsetByChat.clear();
+    _flowIdsExhaustedChats.clear();
+    _loadedFlowCountByChat.clear();
+  }
+
+  void clearHistoryError() {
+    if (_historyError == null) return;
+    _historyError = null;
+    notifyListeners();
   }
 
   List<Message> _extractMessagesFromFlowEvents({
@@ -1309,7 +1356,8 @@ class ChatService extends ChangeNotifier {
     if (value is num || value is bool) return value.toString();
     if (value is Map) {
       final map = Map<String, dynamic>.from(value);
-      final nested = map['text'] ?? map['content'] ?? map['message'] ?? map['msg'];
+      final nested =
+          map['text'] ?? map['content'] ?? map['message'] ?? map['msg'];
       if (nested != null) {
         return _flattenContentValue(nested);
       }

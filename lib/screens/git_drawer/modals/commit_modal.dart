@@ -161,7 +161,6 @@ class _CommitModalState extends State<CommitModal> {
                       TextField(
                         controller: _controller,
                         focusNode: _focusNode,
-                        maxLength: 72,
                         maxLines: 3,
                         onChanged: (_) => setState(() {}),
                         style: TextStyle(
@@ -175,7 +174,6 @@ class _CommitModalState extends State<CommitModal> {
                             borderRadius: BorderRadius.circular(12),
                             borderSide: BorderSide.none,
                           ),
-                          counterText: '',
                           suffixIcon: IconButton(
                             tooltip: '生成 Commit Message',
                             onPressed:
