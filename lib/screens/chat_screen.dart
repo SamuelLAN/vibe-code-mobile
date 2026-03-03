@@ -14,6 +14,7 @@ import '../services/audio_player_service.dart';
 import '../services/audio_recorder_service.dart';
 import '../services/auth_service.dart';
 import '../services/chat_service.dart';
+import '../services/git_service.dart';
 import '../services/permission_service.dart';
 import '../services/settings_service.dart';
 import '../widgets/attachment_tray.dart';
@@ -49,6 +50,7 @@ class _ChatScreenState extends State<ChatScreen> {
   InputMode _inputMode = InputMode.voice;
   ChatModelTier _modelTier = ChatModelTier.flash;
   bool _isFullscreenInput = false;
+  bool _isAddingProject = false;
   String _selectedProject = _defaultProjects.first;
   String? _lastObservedChatId;
   bool _pendingScrollToLatest = false;
@@ -207,27 +209,65 @@ class _ChatScreenState extends State<ChatScreen> {
                 const SizedBox(width: 10),
                 Expanded(
                   child: ElevatedButton(
-                    onPressed: () async {
-                      final projectName =
-                          _projectNameFromGitHubUrl(controller.text);
-                      if (projectName == null) {
-                        if (!context.mounted) return;
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          const SnackBar(
-                              content: Text('Please enter a valid GitHub URL')),
-                        );
-                        return;
-                      }
+                    onPressed: _isAddingProject
+                        ? null
+                        : () async {
+                            final inputUrl = controller.text.trim();
+                            final projectName =
+                                _projectNameFromGitHubUrl(inputUrl);
+                            if (projectName == null) {
+                              if (!context.mounted) return;
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                const SnackBar(
+                                  content:
+                                      Text('Please enter a valid GitHub URL'),
+                                ),
+                              );
+                              return;
+                            }
 
-                      if (!_projects.contains(projectName)) {
-                        _projects.add(projectName);
-                      }
-                      await _selectProject(projectName);
+                            if (mounted) {
+                              setState(() => _isAddingProject = true);
+                            }
+                            try {
+                              final git = context.read<GitService>();
+                              final cloneResult = await git.cloneRepo(
+                                projectName: projectName,
+                                repoUrl: inputUrl,
+                              );
+                              if (!cloneResult.success) {
+                                if (!context.mounted) return;
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  SnackBar(content: Text(cloneResult.message)),
+                                );
+                                return;
+                              }
 
-                      if (!context.mounted) return;
-                      Navigator.of(context).pop();
-                    },
-                    child: const Text('Add'),
+                              if (!_projects.contains(projectName)) {
+                                _projects.add(projectName);
+                              }
+                              await _selectProject(projectName);
+
+                              if (!context.mounted) return;
+                              Navigator.of(context).pop();
+                            } catch (e) {
+                              if (!context.mounted) return;
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                SnackBar(content: Text('Add project failed: $e')),
+                              );
+                            } finally {
+                              if (mounted) {
+                                setState(() => _isAddingProject = false);
+                              }
+                            }
+                          },
+                    child: _isAddingProject
+                        ? const SizedBox(
+                            width: 18,
+                            height: 18,
+                            child: CircularProgressIndicator(strokeWidth: 2),
+                          )
+                        : const Text('Add'),
                   ),
                 ),
               ],

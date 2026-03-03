@@ -715,6 +715,45 @@ class GitService extends ChangeNotifier {
     return const <GitRepoNode>[];
   }
 
+  Future<GitOperationResult> cloneRepo({
+    required String projectName,
+    required String repoUrl,
+    String? branch,
+  }) async {
+    return _post(
+      '/vibe/git/repo/clone',
+      body: {
+        'project_name': projectName.trim(),
+        'repo_url': repoUrl.trim(),
+        if (branch != null && branch.trim().isNotEmpty) 'branch': branch.trim(),
+      },
+    );
+  }
+
+  Future<GitOperationResult> configRepo({
+    required String projectName,
+    required String configContent,
+  }) async {
+    return _post(
+      '/vibe/git/repo/config',
+      body: {
+        'project_name': projectName.trim(),
+        'config_content': configContent,
+      },
+    );
+  }
+
+  Future<GitOperationResult> createCondaEnv({
+    required String projectName,
+  }) async {
+    return _post(
+      '/vibe/git/repo/conda/create',
+      body: {
+        'project_name': projectName.trim(),
+      },
+    );
+  }
+
   Future<GitReadFileResult> readFile({
     String? projectName,
     required String relativePath,
