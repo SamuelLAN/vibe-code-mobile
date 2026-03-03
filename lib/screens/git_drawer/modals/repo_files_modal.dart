@@ -39,6 +39,30 @@ class _RepoFilesModalState extends State<RepoFilesModal> {
   String? _error;
   String? _selectedPath;
 
+  void _showCopySuccessTip() {
+    final messenger = ScaffoldMessenger.of(context);
+    messenger
+      ..hideCurrentSnackBar()
+      ..showSnackBar(
+        SnackBar(
+          behavior: SnackBarBehavior.floating,
+          margin: const EdgeInsets.fromLTRB(16, 0, 16, 20),
+          duration: const Duration(milliseconds: 1400),
+          backgroundColor: const Color(0xFF2E7D32),
+          content: const Row(
+            children: [
+              Icon(Icons.check_circle_rounded, color: Colors.white, size: 18),
+              SizedBox(width: 8),
+              Text(
+                'Copy successfully',
+                style: TextStyle(fontWeight: FontWeight.w600),
+              ),
+            ],
+          ),
+        ),
+      );
+  }
+
   @override
   void initState() {
     super.initState();
@@ -133,21 +157,6 @@ class _RepoFilesModalState extends State<RepoFilesModal> {
               );
               await _loadRoot();
             },
-            onDelete: () async {
-              final confirmed = await _showRemoveConfirm(
-                title: 'Remove file',
-                message:
-                    'This will permanently remove `${result.relativePath}`. Continue?',
-              );
-              if (confirmed != true) return;
-              await widget.onRemoveFile(result.relativePath);
-              if (!mounted) return;
-              Navigator.pop(context);
-              ScaffoldMessenger.of(this.context).showSnackBar(
-                const SnackBar(content: Text('File removed')),
-              );
-              await _loadRoot();
-            },
           ),
         ),
       );
@@ -186,20 +195,49 @@ class _RepoFilesModalState extends State<RepoFilesModal> {
                   ),
                 ),
                 const SizedBox(height: 8),
-                ListTile(
-                  leading: const Icon(Icons.copy_rounded),
-                  title: const Text('Copy relative path'),
-                  subtitle: Text(node.path),
-                  onTap: () async {
-                    await Clipboard.setData(ClipboardData(text: node.path));
-                    if (!mounted) return;
-                    Navigator.pop(sheetContext);
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(content: Text('Path copied')),
-                    );
-                  },
-                ),
-                if (!isDir)
+                if (isDir)
+                  ListTile(
+                    leading: const Icon(Icons.copy_rounded),
+                    title: const Text('Copy path'),
+                    onTap: () async {
+                      await Clipboard.setData(ClipboardData(text: node.path));
+                      if (!mounted) return;
+                      Navigator.pop(sheetContext);
+                      _showCopySuccessTip();
+                    },
+                  ),
+                if (!isDir) ...[
+                  ListTile(
+                    leading: const Icon(Icons.copy_rounded),
+                    title: const Text('Copy path'),
+                    onTap: () async {
+                      await Clipboard.setData(ClipboardData(text: node.path));
+                      if (!mounted) return;
+                      Navigator.pop(sheetContext);
+                      _showCopySuccessTip();
+                    },
+                  ),
+                  ListTile(
+                    leading: const Icon(Icons.description_outlined),
+                    title: const Text('Copy file content'),
+                    onTap: () async {
+                      Navigator.pop(sheetContext);
+                      try {
+                        final file = await widget.onReadFile(node.path);
+                        if (!mounted) return;
+                        await Clipboard.setData(
+                          ClipboardData(text: file.content),
+                        );
+                        if (!mounted) return;
+                        _showCopySuccessTip();
+                      } catch (e) {
+                        if (!mounted) return;
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(content: Text('Copy failed: $e')),
+                        );
+                      }
+                    },
+                  ),
                   ListTile(
                     leading: const Icon(Icons.edit_rounded),
                     title: const Text('Edit file'),
@@ -208,6 +246,7 @@ class _RepoFilesModalState extends State<RepoFilesModal> {
                       _openFile(node);
                     },
                   ),
+                ],
                 ListTile(
                   leading: const Icon(Icons.delete_outline_rounded,
                       color: Colors.redAccent),
@@ -549,12 +588,10 @@ class _FilePreviewSheet extends StatefulWidget {
   const _FilePreviewSheet({
     required this.result,
     required this.onSave,
-    required this.onDelete,
   });
 
   final GitReadFileResult result;
   final Future<void> Function(String content) onSave;
-  final Future<void> Function() onDelete;
 
   @override
   State<_FilePreviewSheet> createState() => _FilePreviewSheetState();
@@ -564,7 +601,30 @@ class _FilePreviewSheetState extends State<_FilePreviewSheet> {
   late final TextEditingController _controller;
   bool _editing = false;
   bool _saving = false;
-  bool _deleting = false;
+
+  void _showCopySuccessTip() {
+    final messenger = ScaffoldMessenger.of(context);
+    messenger
+      ..hideCurrentSnackBar()
+      ..showSnackBar(
+        SnackBar(
+          behavior: SnackBarBehavior.floating,
+          margin: const EdgeInsets.fromLTRB(16, 0, 16, 20),
+          duration: const Duration(milliseconds: 1400),
+          backgroundColor: const Color(0xFF2E7D32),
+          content: const Row(
+            children: [
+              Icon(Icons.check_circle_rounded, color: Colors.white, size: 18),
+              SizedBox(width: 8),
+              Text(
+                'Copy successfully',
+                style: TextStyle(fontWeight: FontWeight.w600),
+              ),
+            ],
+          ),
+        ),
+      );
+  }
 
   @override
   void initState() {
@@ -647,35 +707,22 @@ class _FilePreviewSheetState extends State<_FilePreviewSheet> {
                           ? Icons.visibility_rounded
                           : Icons.edit_rounded),
                       tooltip: _editing ? 'Preview' : 'Edit',
-                      onPressed: _saving || _deleting
+                      onPressed: _saving
                           ? null
                           : () => setState(() => _editing = !_editing),
                     ),
                     IconButton(
-                      icon: _deleting
-                          ? const SizedBox(
-                              width: 18,
-                              height: 18,
-                              child: CircularProgressIndicator(strokeWidth: 2),
-                            )
-                          : const Icon(Icons.delete_outline_rounded),
-                      tooltip: 'Remove file',
-                      onPressed: _saving || _deleting
+                      icon: const Icon(Icons.copy_rounded),
+                      tooltip: 'Copy content',
+                      onPressed: _saving
                           ? null
                           : () async {
-                              setState(() => _deleting = true);
-                              try {
-                                await widget.onDelete();
-                              } finally {
-                                if (mounted) {
-                                  setState(() => _deleting = false);
-                                }
-                              }
+                              await Clipboard.setData(
+                                ClipboardData(text: _controller.text),
+                              );
+                              if (!mounted) return;
+                              _showCopySuccessTip();
                             },
-                    ),
-                    IconButton(
-                      icon: Icon(Icons.close, color: Colors.grey[600]),
-                      onPressed: () => Navigator.pop(context),
                     ),
                   ],
                 ),
