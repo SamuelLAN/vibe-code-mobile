@@ -145,24 +145,26 @@ class _InputBarState extends State<InputBar> {
 
   Widget _buildModelTierSwitch() {
     final isPro = widget.modelTier == ChatModelTier.pro;
-    return TextButton(
-      tooltip: isPro
+    return Tooltip(
+      message: isPro
           ? 'Current: pro (tap to switch to flash)'
           : 'Current: flash (tap to switch to pro)',
-      onPressed: () => widget.onModelTierChanged(
-        isPro ? ChatModelTier.flash : ChatModelTier.pro,
-      ),
-      style: TextButton.styleFrom(
-        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-        minimumSize: const Size(0, 0),
-        tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-      ),
-      child: Text(
-        isPro ? 'Pro' : 'Flash',
-        style: const TextStyle(
-          fontSize: 14,
-          fontWeight: FontWeight.w600,
-          color: Colors.black87,
+      child: TextButton(
+        onPressed: () => widget.onModelTierChanged(
+          isPro ? ChatModelTier.flash : ChatModelTier.pro,
+        ),
+        style: TextButton.styleFrom(
+          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+          minimumSize: const Size(0, 0),
+          tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+        ),
+        child: Text(
+          isPro ? 'Pro' : 'Flash',
+          style: const TextStyle(
+            fontSize: 14,
+            fontWeight: FontWeight.w600,
+            color: Colors.black87,
+          ),
         ),
       ),
     );
