@@ -1,5 +1,6 @@
 import 'dart:convert';
 import 'dart:io';
+import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 import 'package:flutter_markdown/flutter_markdown.dart';
@@ -88,12 +89,14 @@ class MessageBubble extends StatelessWidget {
     required this.message,
     this.onCopy,
     this.onRetry,
+    this.onStopStreaming,
     this.audioPlayer,
   });
 
   final Message message;
   final VoidCallback? onCopy;
   final VoidCallback? onRetry;
+  final VoidCallback? onStopStreaming;
   final AudioPlayerService? audioPlayer;
 
   @override
@@ -136,6 +139,10 @@ class MessageBubble extends StatelessWidget {
                       isDark: isDark,
                     ),
             ),
+            if (!isUser && message.isStreaming) ...[
+              const SizedBox(height: 10),
+              _StreamingMessageFooter(onStop: onStopStreaming),
+            ],
             if (onCopy != null || (!isUser && onRetry != null)) ...[
               const SizedBox(height: 6),
               Row(
@@ -159,6 +166,191 @@ class MessageBubble extends StatelessWidget {
         ),
       ),
     );
+  }
+}
+
+class _StreamingMessageFooter extends StatefulWidget {
+  const _StreamingMessageFooter({required this.onStop});
+
+  final VoidCallback? onStop;
+
+  @override
+  State<_StreamingMessageFooter> createState() =>
+      _StreamingMessageFooterState();
+}
+
+class _StreamingMessageFooterState extends State<_StreamingMessageFooter>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _controller;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 1200),
+    )..repeat();
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.end,
+      children: [
+        Expanded(child: _StreamingSkeletonLines(animation: _controller)),
+        const SizedBox(width: 10),
+        _RotatingStopButton(
+          animation: _controller,
+          onPressed: widget.onStop,
+        ),
+      ],
+    );
+  }
+}
+
+class _StreamingSkeletonLines extends StatelessWidget {
+  const _StreamingSkeletonLines({required this.animation});
+
+  final Animation<double> animation;
+
+  @override
+  Widget build(BuildContext context) {
+    return AnimatedBuilder(
+      animation: animation,
+      builder: (context, _) {
+        final pulse =
+            0.35 + ((math.sin(animation.value * 2 * math.pi) + 1) * 0.2);
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            _SkeletonLine(widthFactor: 0.78, alpha: pulse),
+            const SizedBox(height: 6),
+            _SkeletonLine(widthFactor: 0.62, alpha: pulse * 0.9),
+          ],
+        );
+      },
+    );
+  }
+}
+
+class _SkeletonLine extends StatelessWidget {
+  const _SkeletonLine({
+    required this.widthFactor,
+    required this.alpha,
+  });
+
+  final double widthFactor;
+  final double alpha;
+
+  @override
+  Widget build(BuildContext context) {
+    return FractionallySizedBox(
+      widthFactor: widthFactor,
+      child: Container(
+        height: 10,
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(999),
+          gradient: LinearGradient(
+            begin: Alignment.centerLeft,
+            end: Alignment.centerRight,
+            colors: [
+              Colors.grey.withValues(alpha: alpha * 0.45),
+              Colors.grey.withValues(alpha: alpha),
+              Colors.grey.withValues(alpha: alpha * 0.45),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _RotatingStopButton extends StatelessWidget {
+  const _RotatingStopButton({
+    required this.animation,
+    required this.onPressed,
+  });
+
+  final Animation<double> animation;
+  final VoidCallback? onPressed;
+
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox(
+      width: 30,
+      height: 30,
+      child: Stack(
+        alignment: Alignment.center,
+        children: [
+          AnimatedBuilder(
+            animation: animation,
+            builder: (context, child) {
+              return Transform.rotate(
+                angle: animation.value * 2 * math.pi,
+                child: child,
+              );
+            },
+            child: CustomPaint(
+              size: const Size(30, 30),
+              painter: _SpinnerRingPainter(color: Colors.red),
+            ),
+          ),
+          Material(
+            color: Colors.red,
+            shape: const CircleBorder(),
+            child: InkWell(
+              customBorder: const CircleBorder(),
+              onTap: onPressed,
+              child: const SizedBox(
+                width: 22,
+                height: 22,
+                child: Icon(Icons.stop, size: 14, color: Colors.white),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _SpinnerRingPainter extends CustomPainter {
+  const _SpinnerRingPainter({required this.color});
+
+  final Color color;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final center = Offset(size.width / 2, size.height / 2);
+    final radius = (size.width / 2) - 1.5;
+    final basePaint = Paint()
+      ..color = color.withValues(alpha: 0.18)
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 2;
+    final activePaint = Paint()
+      ..color = color.withValues(alpha: 0.9)
+      ..style = PaintingStyle.stroke
+      ..strokeCap = StrokeCap.round
+      ..strokeWidth = 2.2;
+    canvas.drawCircle(center, radius, basePaint);
+    canvas.drawArc(
+      Rect.fromCircle(center: center, radius: radius),
+      -math.pi / 2,
+      math.pi * 1.2,
+      false,
+      activePaint,
+    );
+  }
+
+  @override
+  bool shouldRepaint(covariant _SpinnerRingPainter oldDelegate) {
+    return oldDelegate.color != color;
   }
 }
 

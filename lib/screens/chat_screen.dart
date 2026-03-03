@@ -880,6 +880,11 @@ class _ChatScreenState extends State<ChatScreen> {
                             onRetry: message.role == MessageRole.assistant
                                 ? () => chat.retryLastUserMessage()
                                 : null,
+                            onStopStreaming:
+                                message.role == MessageRole.assistant &&
+                                        message.isStreaming
+                                    ? chat.stopGeneration
+                                    : null,
                           );
                         },
                       ),
@@ -895,9 +900,7 @@ class _ChatScreenState extends State<ChatScreen> {
                   mode: _inputMode,
                   modelTier: _modelTier,
                   controller: _textController,
-                  isGenerating: chat.isGenerating,
                   onSend: _sendMessage,
-                  onStop: chat.stopGeneration,
                   onModelTierChanged: _onModelTierChanged,
                   onToggleMode: _toggleInputMode,
                   onPickMedia: _showMediaPicker,
@@ -918,9 +921,7 @@ class _ChatScreenState extends State<ChatScreen> {
                 mode: _inputMode,
                 modelTier: _modelTier,
                 controller: _textController,
-                isGenerating: chat.isGenerating,
                 onSend: _sendMessage,
-                onStop: chat.stopGeneration,
                 onModelTierChanged: _onModelTierChanged,
                 onToggleMode: _toggleInputMode,
                 onPickMedia: _showMediaPicker,

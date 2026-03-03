@@ -6,6 +6,7 @@ import '../services/permission_service.dart';
 import 'waveform_indicator.dart';
 
 enum InputMode { voice, text }
+
 enum ChatModelTier { flash, pro }
 
 class InputBar extends StatefulWidget {
@@ -14,9 +15,7 @@ class InputBar extends StatefulWidget {
     required this.mode,
     required this.modelTier,
     required this.controller,
-    required this.isGenerating,
     required this.onSend,
-    required this.onStop,
     required this.onModelTierChanged,
     required this.onToggleMode,
     required this.onPickMedia,
@@ -32,9 +31,7 @@ class InputBar extends StatefulWidget {
     required this.mode,
     required this.modelTier,
     required this.controller,
-    required this.isGenerating,
     required this.onSend,
-    required this.onStop,
     required this.onModelTierChanged,
     required this.onToggleMode,
     required this.onPickMedia,
@@ -49,9 +46,7 @@ class InputBar extends StatefulWidget {
   final InputMode mode;
   final ChatModelTier modelTier;
   final TextEditingController controller;
-  final bool isGenerating;
   final VoidCallback onSend;
-  final VoidCallback onStop;
   final ValueChanged<ChatModelTier> onModelTierChanged;
   final VoidCallback onToggleMode;
   final VoidCallback onPickMedia;
@@ -119,19 +114,18 @@ class _InputBarState extends State<InputBar> {
   bool get _hasMultipleLines => _lineCount >= 2;
 
   Widget _buildSendButton() {
-    final isStopping = widget.isGenerating;
     return Container(
       width: 36,
       height: 36,
       decoration: BoxDecoration(
-        color: isStopping ? Colors.red : const Color(0xFF2196F3),
+        color: const Color(0xFF2196F3),
         shape: BoxShape.circle,
       ),
       child: IconButton(
-        onPressed: isStopping ? widget.onStop : widget.onSend,
+        onPressed: widget.onSend,
         padding: EdgeInsets.zero,
         icon: Icon(
-          isStopping ? Icons.stop : Icons.send,
+          Icons.send,
           size: 20,
           color: Colors.white,
         ),
@@ -157,7 +151,9 @@ class _InputBarState extends State<InputBar> {
   Widget _buildModelTierSwitch() {
     final isPro = widget.modelTier == ChatModelTier.pro;
     return IconButton(
-      tooltip: isPro ? 'Current: pro (tap to switch to flash)' : 'Current: flash (tap to switch to pro)',
+      tooltip: isPro
+          ? 'Current: pro (tap to switch to flash)'
+          : 'Current: flash (tap to switch to pro)',
       onPressed: () => widget.onModelTierChanged(
         isPro ? ChatModelTier.flash : ChatModelTier.pro,
       ),
@@ -265,7 +261,7 @@ class _InputBarState extends State<InputBar> {
                         const Spacer(),
                         _buildModelTierSwitch(),
                         const SizedBox(width: 8),
-                        if (widget.isGenerating || (_isFocused && _hasText))
+                        if (_isFocused && _hasText)
                           _buildSendButton()
                         else
                           IconButton(
