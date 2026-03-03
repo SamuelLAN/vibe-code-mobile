@@ -26,6 +26,7 @@ dependencies:
   just_audio: ^0.9.40
   flutter_web_auth_2: ^4.1.0
   crypto: ^3.0.6
+  flutter_highlight: ^0.7.0
 
 flutter:
   uses-material-design: true

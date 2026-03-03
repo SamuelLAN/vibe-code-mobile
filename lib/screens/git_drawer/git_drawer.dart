@@ -1076,21 +1076,14 @@ class _GitDrawerState extends State<GitDrawer> {
               ),
               const Spacer(),
               if (files.isNotEmpty)
-                TextButton.icon(
+                IconButton(
                   onPressed: _worktreeActionLoading
                       ? null
                       : () => _discardAllWorktreeChanges(context),
-                  style: TextButton.styleFrom(
-                    foregroundColor: GitColors.error,
-                    visualDensity: VisualDensity.compact,
-                    padding:
-                        const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                  ),
-                  icon: const Icon(Icons.delete_sweep_rounded, size: 16),
-                  label: const Text(
-                    'Discard All Changes',
-                    style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600),
-                  ),
+                  tooltip: 'Discard all changes',
+                  visualDensity: VisualDensity.compact,
+                  color: GitColors.error,
+                  icon: const Icon(Icons.delete_sweep_rounded, size: 18),
                 ),
             ],
           ),
@@ -1147,26 +1140,14 @@ class _GitDrawerState extends State<GitDrawer> {
                             ),
                           ),
                           const SizedBox(width: 8),
-                          TextButton(
+                          IconButton(
                             onPressed: _worktreeActionLoading
                                 ? null
                                 : () => _discardSingleFile(context, f),
-                            style: TextButton.styleFrom(
-                              visualDensity: VisualDensity.compact,
-                              foregroundColor: GitColors.error,
-                              minimumSize: const Size(0, 28),
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: 8,
-                                vertical: 4,
-                              ),
-                            ),
-                            child: const Text(
-                              'Discard',
-                              style: TextStyle(
-                                fontSize: 11,
-                                fontWeight: FontWeight.w600,
-                              ),
-                            ),
+                            tooltip: 'Discard file changes',
+                            visualDensity: VisualDensity.compact,
+                            color: GitColors.error,
+                            icon: const Icon(Icons.undo_rounded, size: 18),
                           ),
                         ],
                       ),
@@ -1444,6 +1425,28 @@ class _GitDrawerState extends State<GitDrawer> {
             projectName: widget.projectName,
             relativePath: relativePath,
           ),
+          onSaveFile: (relativePath, content) async {
+            final result = await _git.saveFile(
+              projectName: widget.projectName,
+              filePath: relativePath,
+              content: content,
+            );
+            if (!result.success) throw Exception(result.message);
+          },
+          onRemoveFile: (relativePath) async {
+            final result = await _git.removeFile(
+              projectName: widget.projectName,
+              filePath: relativePath,
+            );
+            if (!result.success) throw Exception(result.message);
+          },
+          onRemoveDir: (relativePath) async {
+            final result = await _git.removeDir(
+              projectName: widget.projectName,
+              dirPath: relativePath,
+            );
+            if (!result.success) throw Exception(result.message);
+          },
         ),
       ),
     );

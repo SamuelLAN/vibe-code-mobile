@@ -742,6 +742,50 @@ class GitService extends ChangeNotifier {
     );
   }
 
+  Future<GitOperationResult> removeFile({
+    String? projectName,
+    required String filePath,
+  }) async {
+    final effectiveProjectName = await _effectiveProjectName(projectName);
+    return _post(
+      '/vibe/git/repo/remove-file',
+      body: {
+        'project_name': effectiveProjectName,
+        'file_path': filePath,
+      },
+    );
+  }
+
+  Future<GitOperationResult> removeDir({
+    String? projectName,
+    required String dirPath,
+  }) async {
+    final effectiveProjectName = await _effectiveProjectName(projectName);
+    return _post(
+      '/vibe/git/repo/remove-dir',
+      body: {
+        'project_name': effectiveProjectName,
+        'dir_path': dirPath,
+      },
+    );
+  }
+
+  Future<GitOperationResult> saveFile({
+    String? projectName,
+    required String filePath,
+    required String content,
+  }) async {
+    final effectiveProjectName = await _effectiveProjectName(projectName);
+    return _post(
+      '/vibe/git/repo/save-file',
+      body: {
+        'project_name': effectiveProjectName,
+        'file_path': filePath,
+        'content': content,
+      },
+    );
+  }
+
   Future<GitOperationResult> _get(
     String path, {
     Map<String, String>? query,

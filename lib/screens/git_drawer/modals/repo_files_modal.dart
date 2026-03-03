@@ -1,4 +1,8 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
+import 'package:flutter_highlight/flutter_highlight.dart';
+import 'package:flutter_highlight/themes/atom-one-dark.dart';
+import 'package:flutter_highlight/themes/github.dart';
 
 import '../../../../models/git_models.dart';
 
@@ -7,11 +11,17 @@ class RepoFilesModal extends StatefulWidget {
     super.key,
     required this.onListDir,
     required this.onReadFile,
+    required this.onSaveFile,
+    required this.onRemoveFile,
+    required this.onRemoveDir,
   });
 
   final Future<List<GitRepoNode>> Function(String relativePath, int depth)
       onListDir;
   final Future<GitReadFileResult> Function(String relativePath) onReadFile;
+  final Future<void> Function(String relativePath, String content) onSaveFile;
+  final Future<void> Function(String relativePath) onRemoveFile;
+  final Future<void> Function(String relativePath) onRemoveDir;
 
   @override
   State<RepoFilesModal> createState() => _RepoFilesModalState();
@@ -89,8 +99,6 @@ class _RepoFilesModalState extends State<RepoFilesModal> {
       setState(() {
         node.replaceChildren(items.map(_RepoTreeNode.fromApi).toList());
       });
-    } catch (_) {
-      // Keep current node state; row remains expandable with existing children.
     } finally {
       if (!mounted) return;
       setState(() => _loadingDirs.remove(path));
@@ -114,8 +122,33 @@ class _RepoFilesModalState extends State<RepoFilesModal> {
         enableDrag: true,
         backgroundColor: Colors.transparent,
         builder: (context) => FractionallySizedBox(
-          heightFactor: 0.9,
-          child: _FilePreviewSheet(result: result),
+          heightFactor: 0.94,
+          child: _FilePreviewSheet(
+            result: result,
+            onSave: (content) async {
+              await widget.onSaveFile(result.relativePath, content);
+              if (!mounted) return;
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(content: Text('File saved')),
+              );
+              await _loadRoot();
+            },
+            onDelete: () async {
+              final confirmed = await _showRemoveConfirm(
+                title: 'Remove file',
+                message:
+                    'This will permanently remove `${result.relativePath}`. Continue?',
+              );
+              if (confirmed != true) return;
+              await widget.onRemoveFile(result.relativePath);
+              if (!mounted) return;
+              Navigator.pop(context);
+              ScaffoldMessenger.of(this.context).showSnackBar(
+                const SnackBar(content: Text('File removed')),
+              );
+              await _loadRoot();
+            },
+          ),
         ),
       );
     } catch (e) {
@@ -125,6 +158,123 @@ class _RepoFilesModalState extends State<RepoFilesModal> {
         SnackBar(content: Text('Failed to read file: $e')),
       );
     }
+  }
+
+  Future<void> _showItemActions(_RepoTreeNode node) async {
+    final isDir = node.isDir;
+    await showModalBottomSheet<void>(
+      context: context,
+      backgroundColor: Colors.transparent,
+      builder: (sheetContext) {
+        final isDark = Theme.of(sheetContext).brightness == Brightness.dark;
+        return Container(
+          decoration: BoxDecoration(
+            color: isDark ? const Color(0xFF1E1E1E) : Colors.white,
+            borderRadius: const BorderRadius.vertical(top: Radius.circular(16)),
+          ),
+          child: SafeArea(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const SizedBox(height: 6),
+                Container(
+                  width: 34,
+                  height: 4,
+                  decoration: BoxDecoration(
+                    color: Colors.grey[400],
+                    borderRadius: BorderRadius.circular(2),
+                  ),
+                ),
+                const SizedBox(height: 8),
+                ListTile(
+                  leading: const Icon(Icons.copy_rounded),
+                  title: const Text('Copy relative path'),
+                  subtitle: Text(node.path),
+                  onTap: () async {
+                    await Clipboard.setData(ClipboardData(text: node.path));
+                    if (!mounted) return;
+                    Navigator.pop(sheetContext);
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(content: Text('Path copied')),
+                    );
+                  },
+                ),
+                if (!isDir)
+                  ListTile(
+                    leading: const Icon(Icons.edit_rounded),
+                    title: const Text('Edit file'),
+                    onTap: () {
+                      Navigator.pop(sheetContext);
+                      _openFile(node);
+                    },
+                  ),
+                ListTile(
+                  leading: const Icon(Icons.delete_outline_rounded,
+                      color: Colors.redAccent),
+                  title: Text(isDir ? 'Remove directory' : 'Remove file',
+                      style: const TextStyle(color: Colors.redAccent)),
+                  onTap: () async {
+                    Navigator.pop(sheetContext);
+                    final confirmed = await _showRemoveConfirm(
+                      title: isDir ? 'Remove directory' : 'Remove file',
+                      message:
+                          'This will permanently remove `${node.path}`. Continue?',
+                    );
+                    if (confirmed != true) return;
+                    try {
+                      if (isDir) {
+                        await widget.onRemoveDir(node.path);
+                      } else {
+                        await widget.onRemoveFile(node.path);
+                      }
+                      if (!mounted) return;
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(
+                          content: Text(
+                            isDir ? 'Directory removed' : 'File removed',
+                          ),
+                        ),
+                      );
+                      await _loadRoot();
+                    } catch (e) {
+                      if (!mounted) return;
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(content: Text('Remove failed: $e')),
+                      );
+                    }
+                  },
+                ),
+                const SizedBox(height: 8),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  Future<bool?> _showRemoveConfirm({
+    required String title,
+    required String message,
+  }) {
+    return showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text(title),
+        content: Text(message),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            style: FilledButton.styleFrom(backgroundColor: Colors.redAccent),
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('Confirm remove'),
+          ),
+        ],
+      ),
+    );
   }
 
   @override
@@ -240,6 +390,7 @@ class _RepoFilesModalState extends State<RepoFilesModal> {
                           onTap: () => node.isDir
                               ? _toggleDirectory(node)
                               : _openFile(node),
+                          onLongPress: () => _showItemActions(node),
                         );
                       },
                     ),
@@ -311,6 +462,7 @@ class _FileTreeRow extends StatelessWidget {
     required this.isSelected,
     required this.isLoadingDir,
     required this.onTap,
+    required this.onLongPress,
   });
 
   final _RepoTreeNode node;
@@ -319,6 +471,7 @@ class _FileTreeRow extends StatelessWidget {
   final bool isSelected;
   final bool isLoadingDir;
   final VoidCallback onTap;
+  final VoidCallback onLongPress;
 
   @override
   Widget build(BuildContext context) {
@@ -332,6 +485,7 @@ class _FileTreeRow extends StatelessWidget {
         child: InkWell(
           borderRadius: BorderRadius.circular(10),
           onTap: onTap,
+          onLongPress: onLongPress,
           child: Container(
             decoration: BoxDecoration(
               color: isSelected
@@ -391,14 +545,43 @@ class _FileTreeRow extends StatelessWidget {
   }
 }
 
-class _FilePreviewSheet extends StatelessWidget {
-  const _FilePreviewSheet({required this.result});
+class _FilePreviewSheet extends StatefulWidget {
+  const _FilePreviewSheet({
+    required this.result,
+    required this.onSave,
+    required this.onDelete,
+  });
 
   final GitReadFileResult result;
+  final Future<void> Function(String content) onSave;
+  final Future<void> Function() onDelete;
+
+  @override
+  State<_FilePreviewSheet> createState() => _FilePreviewSheetState();
+}
+
+class _FilePreviewSheetState extends State<_FilePreviewSheet> {
+  late final TextEditingController _controller;
+  bool _editing = false;
+  bool _saving = false;
+  bool _deleting = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = TextEditingController(text: widget.result.content);
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
+    final language = _languageFromPath(widget.result.relativePath);
     return Container(
       decoration: BoxDecoration(
         color: isDark ? const Color(0xFF1E1E1E) : Colors.white,
@@ -425,7 +608,7 @@ class _FilePreviewSheet extends StatelessWidget {
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Text(
-                          result.relativePath,
+                          widget.result.relativePath,
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
                           style: TextStyle(
@@ -434,9 +617,18 @@ class _FilePreviewSheet extends StatelessWidget {
                             color: isDark ? Colors.white : Colors.black87,
                           ),
                         ),
-                        if (result.truncated)
+                        Text(
+                          _editing
+                              ? 'Editing'
+                              : (language == null ? 'Text preview' : language),
+                          style: TextStyle(
+                            fontSize: 12,
+                            color: Colors.grey[600],
+                          ),
+                        ),
+                        if (widget.result.truncated)
                           Text(
-                            'Truncated to ${result.maxChars} chars',
+                            'Truncated to ${widget.result.maxChars} chars',
                             style: TextStyle(
                               fontSize: 12,
                               color: Colors.orange[700],
@@ -444,6 +636,37 @@ class _FilePreviewSheet extends StatelessWidget {
                           ),
                       ],
                     ),
+                  ),
+                  IconButton(
+                    icon: Icon(_editing
+                        ? Icons.visibility_rounded
+                        : Icons.edit_rounded),
+                    tooltip: _editing ? 'Preview' : 'Edit',
+                    onPressed: _saving || _deleting
+                        ? null
+                        : () => setState(() => _editing = !_editing),
+                  ),
+                  IconButton(
+                    icon: _deleting
+                        ? const SizedBox(
+                            width: 18,
+                            height: 18,
+                            child: CircularProgressIndicator(strokeWidth: 2),
+                          )
+                        : const Icon(Icons.delete_outline_rounded),
+                    tooltip: 'Remove file',
+                    onPressed: _saving || _deleting
+                        ? null
+                        : () async {
+                            setState(() => _deleting = true);
+                            try {
+                              await widget.onDelete();
+                            } finally {
+                              if (mounted) {
+                                setState(() => _deleting = false);
+                              }
+                            }
+                          },
                   ),
                   IconButton(
                     icon: Icon(Icons.close, color: Colors.grey[600]),
@@ -456,7 +679,6 @@ class _FilePreviewSheet extends StatelessWidget {
               child: Container(
                 width: double.infinity,
                 margin: const EdgeInsets.fromLTRB(12, 0, 12, 12),
-                padding: const EdgeInsets.all(12),
                 decoration: BoxDecoration(
                   borderRadius: BorderRadius.circular(12),
                   color: isDark
@@ -465,24 +687,174 @@ class _FilePreviewSheet extends StatelessWidget {
                   border: Border.all(
                       color: isDark ? Colors.white12 : Colors.black12),
                 ),
-                child: SingleChildScrollView(
-                  child: SelectableText(
-                    result.content,
-                    style: TextStyle(
-                      fontSize: 12,
-                      height: 1.45,
-                      fontFamily: 'monospace',
-                      color: isDark ? Colors.white : Colors.black87,
-                    ),
+                child: _editing
+                    ? Padding(
+                        padding: const EdgeInsets.all(10),
+                        child: TextField(
+                          controller: _controller,
+                          expands: true,
+                          maxLines: null,
+                          minLines: null,
+                          style: TextStyle(
+                            fontSize: 12,
+                            height: 1.45,
+                            fontFamily: 'monospace',
+                            color: isDark ? Colors.white : Colors.black87,
+                          ),
+                          decoration: const InputDecoration(
+                            border: InputBorder.none,
+                            isDense: true,
+                          ),
+                        ),
+                      )
+                    : _CodeView(
+                        content: _controller.text,
+                        language: language,
+                        isDark: isDark,
+                      ),
+              ),
+            ),
+            if (_editing)
+              Padding(
+                padding: const EdgeInsets.fromLTRB(12, 0, 12, 12),
+                child: SizedBox(
+                  width: double.infinity,
+                  child: FilledButton.icon(
+                    onPressed: _saving
+                        ? null
+                        : () async {
+                            setState(() => _saving = true);
+                            try {
+                              await widget.onSave(_controller.text);
+                              if (!mounted) return;
+                              setState(() => _editing = false);
+                            } catch (e) {
+                              if (!mounted) return;
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                SnackBar(content: Text('Save failed: $e')),
+                              );
+                            } finally {
+                              if (mounted) {
+                                setState(() => _saving = false);
+                              }
+                            }
+                          },
+                    icon: _saving
+                        ? const SizedBox(
+                            width: 16,
+                            height: 16,
+                            child: CircularProgressIndicator(strokeWidth: 2),
+                          )
+                        : const Icon(Icons.save_rounded),
+                    label: Text(_saving ? 'Saving...' : 'Save file'),
                   ),
                 ),
               ),
-            ),
           ],
         ),
       ),
     );
   }
+}
+
+class _CodeView extends StatelessWidget {
+  const _CodeView({
+    required this.content,
+    required this.language,
+    required this.isDark,
+  });
+
+  final String content;
+  final String? language;
+  final bool isDark;
+
+  @override
+  Widget build(BuildContext context) {
+    final lineCount = '\n'.allMatches(content).length + 1;
+    final numbers =
+        List<String>.generate(lineCount, (i) => '${i + 1}').join('\n');
+    final textTheme = Theme.of(context).textTheme;
+
+    return Scrollbar(
+      child: SingleChildScrollView(
+        child: SingleChildScrollView(
+          scrollDirection: Axis.horizontal,
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Container(
+                padding: const EdgeInsets.fromLTRB(10, 10, 10, 10),
+                decoration: BoxDecoration(
+                  color: isDark
+                      ? const Color(0xFF0E1620)
+                      : const Color(0xFFF0F3F7),
+                  borderRadius:
+                      const BorderRadius.horizontal(left: Radius.circular(12)),
+                ),
+                child: SelectableText(
+                  numbers,
+                  textAlign: TextAlign.right,
+                  style: TextStyle(
+                    fontSize: 12,
+                    height: 1.45,
+                    fontFamily: 'monospace',
+                    color: Colors.grey[600],
+                  ),
+                ),
+              ),
+              Container(
+                width: 1,
+                color: isDark ? Colors.white12 : Colors.black12,
+              ),
+              ConstrainedBox(
+                constraints: BoxConstraints(
+                  minWidth: MediaQuery.of(context).size.width - 70,
+                ),
+                child: HighlightView(
+                  content,
+                  language: language,
+                  theme: isDark ? atomOneDarkTheme : githubTheme,
+                  padding: const EdgeInsets.fromLTRB(12, 10, 12, 10),
+                  textStyle: textTheme.bodySmall?.copyWith(
+                        fontSize: 12,
+                        height: 1.45,
+                        fontFamily: 'monospace',
+                      ) ??
+                      const TextStyle(
+                        fontSize: 12,
+                        height: 1.45,
+                        fontFamily: 'monospace',
+                      ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+String? _languageFromPath(String path) {
+  final lower = path.toLowerCase();
+  if (lower.endsWith('.py')) return 'python';
+  if (lower.endsWith('.js') ||
+      lower.endsWith('.mjs') ||
+      lower.endsWith('.cjs')) {
+    return 'javascript';
+  }
+  if (lower.endsWith('.tsx')) return 'tsx';
+  if (lower.endsWith('.ts')) return 'typescript';
+  if (lower.endsWith('.jsx')) return 'jsx';
+  if (lower.endsWith('.json')) return 'json';
+  if (lower.endsWith('.md') || lower.endsWith('.markdown')) return 'markdown';
+  if (lower.endsWith('.html')) return 'xml';
+  if (lower.endsWith('.css')) return 'css';
+  if (lower.endsWith('.scss')) return 'scss';
+  if (lower.endsWith('.yml') || lower.endsWith('.yaml')) return 'yaml';
+  if (lower.endsWith('.sh')) return 'bash';
+  if (lower.endsWith('.dart')) return 'dart';
+  return null;
 }
 
 class _VisibleTreeNode {
