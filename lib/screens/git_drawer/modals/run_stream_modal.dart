@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:convert';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 import '../../../constants/colors.dart';
 import '../../../models/git_models.dart';
@@ -111,9 +112,19 @@ class _RunStreamModalState extends State<RunStreamModal> {
     });
   }
 
+  Future<void> _copyLogsToClipboard(String logs) async {
+    if (logs.trim().isEmpty) return;
+    await Clipboard.setData(ClipboardData(text: logs));
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('Build logs copied')),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
+    final joinedLines = _lines.join('\n');
     return Container(
       decoration: BoxDecoration(
         color: isDark ? const Color(0xFF1E1E1E) : Colors.white,
@@ -148,6 +159,13 @@ class _RunStreamModalState extends State<RunStreamModal> {
                   _buildStateBadge(),
                   const SizedBox(width: 8),
                   IconButton(
+                    onPressed: joinedLines.trim().isEmpty
+                        ? null
+                        : () => _copyLogsToClipboard(joinedLines),
+                    icon: const Icon(Icons.copy_all_rounded),
+                    tooltip: 'Copy logs',
+                  ),
+                  IconButton(
                     onPressed: () => Navigator.pop(context),
                     icon: const Icon(Icons.close_rounded),
                     tooltip: 'Close',
@@ -159,14 +177,12 @@ class _RunStreamModalState extends State<RunStreamModal> {
             Expanded(
               child: _lines.isEmpty
                   ? const Center(child: CircularProgressIndicator())
-                  : ListView.builder(
+                  : SingleChildScrollView(
                       controller: _scrollController,
                       padding: const EdgeInsets.fromLTRB(14, 10, 14, 14),
-                      itemCount: _lines.length,
-                      itemBuilder: (context, index) => Padding(
-                        padding: const EdgeInsets.only(bottom: 6),
+                      child: SelectionArea(
                         child: SelectableText(
-                          _lines[index],
+                          joinedLines,
                           style: TextStyle(
                             fontSize: 12,
                             height: 1.3,
@@ -209,7 +225,7 @@ class _RunStreamModalState extends State<RunStreamModal> {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
       decoration: BoxDecoration(
-        color: color.withOpacity(0.12),
+        color: color.withValues(alpha: 0.12),
         borderRadius: BorderRadius.circular(10),
       ),
       child: Text(

@@ -70,6 +70,7 @@ class ChatService extends ChangeNotifier {
   final Set<String> _flowIdsExhaustedChats = {};
   final Map<String, int> _loadedFlowCountByChat = {};
   bool _isLoadingOlderHistory = false;
+  bool _isRefreshingChats = false;
 
   static const int _chatNotFoundErrorCode = 3001;
 
@@ -80,6 +81,7 @@ class ChatService extends ChangeNotifier {
   String? get error => _error;
   String? get historyError => _historyError;
   bool get isLoadingOlderHistory => _isLoadingOlderHistory;
+  bool get isRefreshingChats => _isRefreshingChats;
   bool get hasMoreHistory {
     final chatId = _activeChat?.id;
     if (chatId == null) return false;
@@ -89,10 +91,11 @@ class ChatService extends ChangeNotifier {
   Future<void> initialize() async {
     await _repo.init();
     await loadChats();
+    unawaited(refreshChatsFromServer(silent: true));
   }
 
-  Future<void> loadChats() async {
-    _chats = await _repo.getChats();
+  Future<void> loadChats({bool forceRefresh = false}) async {
+    _chats = await _repo.getChats(forceRefresh: forceRefresh);
     if (_chats.isEmpty) {
       final chat = Chat(
         id: _uuid.v4(),
@@ -103,7 +106,10 @@ class ChatService extends ChangeNotifier {
       final createdChat = await _repo.createChat(chat);
       _chats = [createdChat];
     }
-    await selectChat(_chats.first.id);
+    final targetId = _activeChat?.id;
+    final shouldKeepActive =
+        targetId != null && _chats.any((chat) => chat.id == targetId);
+    await selectChat(shouldKeepActive ? targetId : _chats.first.id);
   }
 
   Future<void> switchProject() async {
@@ -116,7 +122,7 @@ class ChatService extends ChangeNotifier {
     await _repo.clearInMemoryMessageCache();
     _resetAllHistorySyncState();
     notifyListeners();
-    await loadChats();
+    await loadChats(forceRefresh: true);
   }
 
   Future<void> refreshChats() async {
@@ -127,6 +133,27 @@ class ChatService extends ChangeNotifier {
           orElse: () => _chats.first);
     }
     notifyListeners();
+  }
+
+  Future<void> refreshChatsFromServer({bool silent = false}) async {
+    if (_isRefreshingChats) return;
+    _isRefreshingChats = true;
+    if (!silent) {
+      notifyListeners();
+    }
+    try {
+      _chats = await _repo.getChats(forceRefresh: true);
+      if (_chats.isEmpty) return;
+
+      final activeId = _activeChat?.id;
+      final nextId = (activeId != null && _chats.any((c) => c.id == activeId))
+          ? activeId
+          : _chats.first.id;
+      await selectChat(nextId);
+    } finally {
+      _isRefreshingChats = false;
+      notifyListeners();
+    }
   }
 
   Future<void> selectChat(String chatId) async {

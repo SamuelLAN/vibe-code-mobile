@@ -40,10 +40,17 @@ class ChatRepository {
     await _ensureMessageCacheDir();
   }
 
-  Future<List<Chat>> getChats() async {
+  Future<List<Chat>> getChats({bool forceRefresh = false}) async {
+    final localChats = await _readChatsFromDisk();
+    _hydrateChatCache(localChats);
+
+    if (!forceRefresh && localChats.isNotEmpty) {
+      return _sortChats(localChats);
+    }
+
     final accessToken = await _authService?.getValidToken();
     if (accessToken == null) {
-      return _sortedCachedChats();
+      return _sortChats(localChats);
     }
 
     try {
@@ -89,11 +96,13 @@ class ChatRepository {
         }
       }
 
-      return List.from(chats)
-        ..sort((a, b) => b.updatedAt.compareTo(a.updatedAt));
+      final sorted = _sortChats(chats);
+      await _writeChatsToDisk(sorted);
+      _hydrateChatCache(sorted);
+      return sorted;
     } catch (e) {
-      debugPrint('[ChatRepository] getChats failed, fallback to cache: $e');
-      return _sortedCachedChats();
+      debugPrint('[ChatRepository] getChats failed, fallback to local: $e');
+      return _sortChats(localChats);
     }
   }
 
@@ -102,6 +111,7 @@ class ChatRepository {
     if (accessToken == null) {
       _chatCache[chat.id] = chat;
       _messages[chat.id] = [];
+      await _upsertLocalChat(chat);
       return chat;
     }
 
@@ -130,11 +140,13 @@ class ChatRepository {
       _serverTitleCache[created.id] = created.title;
       _lastPreviewCache[created.id] = chat.lastMessagePreview;
       _messages.putIfAbsent(created.id, () => []);
+      await _upsertLocalChat(created);
       return created;
     } catch (e) {
       debugPrint('[ChatRepository] createChat failed, fallback local: $e');
       _chatCache[chat.id] = chat;
       _messages[chat.id] = [];
+      await _upsertLocalChat(chat);
       return chat;
     }
   }
@@ -142,6 +154,7 @@ class ChatRepository {
   Future<void> updateChat(Chat chat) async {
     _chatCache[chat.id] = chat;
     _lastPreviewCache[chat.id] = chat.lastMessagePreview;
+    await _upsertLocalChat(chat);
 
     final accessToken = await _authService?.getValidToken();
     if (accessToken == null) return;
@@ -218,6 +231,7 @@ class ChatRepository {
       _activeChatId = null;
     }
     await _deleteMessagesFromDisk(chatId);
+    await _removeLocalChat(chatId);
 
     final accessToken = await _authService?.getValidToken();
     if (accessToken == null) return;
@@ -241,9 +255,10 @@ class ChatRepository {
   }
 
   Future<Chat?> getChatDetail(String chatId) async {
+    final local = await _getLocalChatById(chatId);
     final accessToken = await _authService?.getValidToken();
     if (accessToken == null) {
-      return _chatCache[chatId];
+      return local ?? _chatCache[chatId];
     }
 
     try {
@@ -267,10 +282,11 @@ class ChatRepository {
       }
       _chatCache[chat.id] = chat;
       _serverTitleCache[chat.id] = chat.title;
+      await _upsertLocalChat(chat);
       return chat;
     } catch (e) {
       debugPrint('[ChatRepository] getChatDetail failed for $chatId: $e');
-      return _chatCache[chatId];
+      return local ?? _chatCache[chatId];
     }
   }
 
@@ -385,9 +401,15 @@ class ChatRepository {
     _client.close();
   }
 
-  List<Chat> _sortedCachedChats() {
-    return _chatCache.values.toList()
+  List<Chat> _sortChats(List<Chat> chats) {
+    return List<Chat>.from(chats)
       ..sort((a, b) => b.updatedAt.compareTo(a.updatedAt));
+  }
+
+  void _hydrateChatCache(List<Chat> chats) {
+    _chatCache
+      ..clear()
+      ..addEntries(chats.map((c) => MapEntry(c.id, c)));
   }
 
   List<Map<String, dynamic>> _extractList(dynamic decoded) {
@@ -535,7 +557,7 @@ class ChatRepository {
     if (_messageCacheDir != null) {
       return _messageCacheDir!;
     }
-    final root = await getTemporaryDirectory();
+    final root = await getApplicationSupportDirectory();
     final dir = Directory(p.join(root.path, 'chat_message_cache'));
     if (!await dir.exists()) {
       await dir.create(recursive: true);
@@ -609,5 +631,64 @@ class ChatRepository {
     if (await file.exists()) {
       await file.delete();
     }
+  }
+
+  Future<String> _chatListCachePath() async {
+    final dir = await _ensureMessageCacheDir();
+    final project = await _effectiveProjectName();
+    return p.join(dir.path, 'chat_list_${Uri.encodeComponent(project)}.json');
+  }
+
+  Future<List<Chat>> _readChatsFromDisk() async {
+    final path = await _chatListCachePath();
+    final file = File(path);
+    if (!await file.exists()) {
+      return <Chat>[];
+    }
+    try {
+      final raw = await file.readAsString();
+      if (raw.trim().isEmpty) return <Chat>[];
+      final decoded = jsonDecode(raw);
+      if (decoded is! List) return <Chat>[];
+      return decoded
+          .whereType<Map>()
+          .map((e) => Chat.fromMap(Map<String, dynamic>.from(e)))
+          .toList();
+    } catch (e) {
+      debugPrint('[ChatRepository] failed to read local chats: $e');
+      return <Chat>[];
+    }
+  }
+
+  Future<void> _writeChatsToDisk(List<Chat> chats) async {
+    final path = await _chatListCachePath();
+    final file = File(path);
+    final payload = jsonEncode(chats.map((c) => c.toMap()).toList());
+    await file.writeAsString(payload, flush: true);
+  }
+
+  Future<void> _upsertLocalChat(Chat chat) async {
+    final chats = await _readChatsFromDisk();
+    final idx = chats.indexWhere((c) => c.id == chat.id);
+    if (idx == -1) {
+      chats.add(chat);
+    } else {
+      chats[idx] = chat;
+    }
+    await _writeChatsToDisk(_sortChats(chats));
+  }
+
+  Future<void> _removeLocalChat(String chatId) async {
+    final chats = await _readChatsFromDisk();
+    chats.removeWhere((c) => c.id == chatId);
+    await _writeChatsToDisk(_sortChats(chats));
+  }
+
+  Future<Chat?> _getLocalChatById(String chatId) async {
+    final chats = await _readChatsFromDisk();
+    for (final chat in chats) {
+      if (chat.id == chatId) return chat;
+    }
+    return null;
   }
 }

@@ -125,16 +125,17 @@ class MessageBubble extends StatelessWidget {
                 audioPlayer: audioPlayer,
               ),
             if (message.attachments.isNotEmpty) const SizedBox(height: 8),
-            if (isUser)
-              _CollapsibleUserText(
-                text: message.content,
-                style: Theme.of(context).textTheme.bodyMedium,
-              )
-            else
-              _AssistantMessageContent(
-                message: message,
-                isDark: isDark,
-              ),
+            SelectionArea(
+              child: isUser
+                  ? _CollapsibleUserText(
+                      text: message.content,
+                      style: Theme.of(context).textTheme.bodyMedium,
+                    )
+                  : _AssistantMessageContent(
+                      message: message,
+                      isDark: isDark,
+                    ),
+            ),
             if (onCopy != null || (!isUser && onRetry != null)) ...[
               const SizedBox(height: 6),
               Row(
