@@ -22,16 +22,19 @@ class RunStreamModal extends StatefulWidget {
 }
 
 class _RunStreamModalState extends State<RunStreamModal> {
+  static const double _autoFollowBottomThreshold = 28;
   final List<String> _lines = <String>[];
   final ScrollController _scrollController = ScrollController();
 
   StreamSubscription<GitSseEvent>? _subscription;
   bool _completed = false;
   bool _errored = false;
+  bool _shouldAutoFollow = true;
 
   @override
   void initState() {
     super.initState();
+    _scrollController.addListener(_handleScroll);
     _appendLine('Connecting...');
     _subscription = widget.stream.listen(
       _onEvent,
@@ -49,9 +52,17 @@ class _RunStreamModalState extends State<RunStreamModal> {
 
   @override
   void dispose() {
+    _scrollController.removeListener(_handleScroll);
     _subscription?.cancel();
     _scrollController.dispose();
     super.dispose();
+  }
+
+  void _handleScroll() {
+    if (!_scrollController.hasClients) return;
+    final position = _scrollController.position;
+    final distanceToBottom = position.maxScrollExtent - position.pixels;
+    _shouldAutoFollow = distanceToBottom <= _autoFollowBottomThreshold;
   }
 
   void _onEvent(GitSseEvent event) {
@@ -103,12 +114,9 @@ class _RunStreamModalState extends State<RunStreamModal> {
     if (!mounted) return;
     setState(() => _lines.add(line));
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (!_scrollController.hasClients) return;
-      _scrollController.animateTo(
-        _scrollController.position.maxScrollExtent + 80,
-        duration: const Duration(milliseconds: 120),
-        curve: Curves.easeOut,
-      );
+      if (!_scrollController.hasClients || !_shouldAutoFollow) return;
+      final max = _scrollController.position.maxScrollExtent;
+      _scrollController.jumpTo(max);
     });
   }
 
@@ -124,10 +132,15 @@ class _RunStreamModalState extends State<RunStreamModal> {
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
+    final surfaceColor = isDark ? const Color(0xFF171B22) : const Color(0xFFF8FAFC);
+    final panelColor = isDark ? const Color(0xFF0F141B) : Colors.white;
+    final titleColor = isDark ? const Color(0xFFEAF1FF) : const Color(0xFF182435);
+    final logTextColor = isDark ? const Color(0xFFD5DFEC) : const Color(0xFF2A3A4F);
+    final iconColor = isDark ? const Color(0xFFB8C4D4) : const Color(0xFF5A6B82);
     final joinedLines = _lines.join('\n');
     return Container(
       decoration: BoxDecoration(
-        color: isDark ? const Color(0xFF1E1E1E) : Colors.white,
+        color: surfaceColor,
         borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
       ),
       child: SafeArea(
@@ -150,9 +163,10 @@ class _RunStreamModalState extends State<RunStreamModal> {
                   Expanded(
                     child: Text(
                       widget.title,
-                      style: const TextStyle(
+                      style: TextStyle(
                         fontSize: 16,
                         fontWeight: FontWeight.w700,
+                        color: titleColor,
                       ),
                     ),
                   ),
@@ -162,36 +176,62 @@ class _RunStreamModalState extends State<RunStreamModal> {
                     onPressed: joinedLines.trim().isEmpty
                         ? null
                         : () => _copyLogsToClipboard(joinedLines),
-                    icon: const Icon(Icons.copy_all_rounded),
+                    icon: Icon(Icons.copy_all_rounded, color: iconColor),
                     tooltip: 'Copy logs',
                   ),
                   IconButton(
                     onPressed: () => Navigator.pop(context),
-                    icon: const Icon(Icons.close_rounded),
+                    icon: Icon(Icons.close_rounded, color: iconColor),
                     tooltip: 'Close',
                   ),
                 ],
               ),
             ),
-            const Divider(height: 1),
             Expanded(
-              child: _lines.isEmpty
-                  ? const Center(child: CircularProgressIndicator())
-                  : SingleChildScrollView(
-                      controller: _scrollController,
-                      padding: const EdgeInsets.fromLTRB(14, 10, 14, 14),
-                      child: SelectionArea(
-                        child: SelectableText(
-                          joinedLines,
-                          style: TextStyle(
-                            fontSize: 12,
-                            height: 1.3,
-                            fontFamily: 'monospace',
-                            color: isDark ? Colors.white : Colors.black87,
+              child: Container(
+                margin: const EdgeInsets.fromLTRB(12, 0, 12, 12),
+                padding: const EdgeInsets.fromLTRB(2, 6, 2, 2),
+                decoration: BoxDecoration(
+                  color: panelColor,
+                  borderRadius: BorderRadius.circular(14),
+                ),
+                child: _lines.isEmpty
+                    ? Column(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          const SizedBox(
+                            width: 20,
+                            height: 20,
+                            child: CircularProgressIndicator(strokeWidth: 2),
+                          ),
+                          const SizedBox(height: 8),
+                          Text(
+                            'Waiting for logs...',
+                            style: TextStyle(
+                              fontSize: 12,
+                              color: isDark
+                                  ? const Color(0xFF9BA8BA)
+                                  : const Color(0xFF73839A),
+                            ),
+                          ),
+                        ],
+                      )
+                    : SingleChildScrollView(
+                        controller: _scrollController,
+                        padding: const EdgeInsets.fromLTRB(12, 8, 12, 12),
+                        child: SelectionArea(
+                          child: SelectableText(
+                            joinedLines,
+                            style: TextStyle(
+                              fontSize: 13,
+                              height: 1.45,
+                              fontFamily: 'monospace',
+                              color: logTextColor,
+                            ),
                           ),
                         ),
                       ),
-                    ),
+              ),
             ),
           ],
         ),

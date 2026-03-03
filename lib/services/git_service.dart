@@ -689,6 +689,59 @@ class GitService extends ChangeNotifier {
     return _parseViewChangesDiff(response.details, filePath: filePath);
   }
 
+  Future<List<GitRepoNode>> listDir({
+    String? projectName,
+    String relativePath = '',
+    int depth = 2,
+  }) async {
+    final effectiveProjectName = await _effectiveProjectName(projectName);
+    final normalizedDepth = depth.clamp(1, 5).toInt();
+    final response = await _post(
+      '/vibe/git/repo/list-dir',
+      body: {
+        'project_name': effectiveProjectName,
+        'relative_path': relativePath,
+        'depth': normalizedDepth,
+      },
+    );
+    if (!response.success) throw Exception(response.message);
+
+    final payload = _payload(response.details);
+    if (payload is List) return _parseRepoNodes(payload);
+    if (payload is Map<String, dynamic>) {
+      final items = _readList(payload, const ['items', 'children', 'files']);
+      return _parseRepoNodes(items);
+    }
+    return const <GitRepoNode>[];
+  }
+
+  Future<GitReadFileResult> readFile({
+    String? projectName,
+    required String relativePath,
+  }) async {
+    final effectiveProjectName = await _effectiveProjectName(projectName);
+    final response = await _post(
+      '/vibe/git/repo/read-file',
+      body: {
+        'project_name': effectiveProjectName,
+        'relative_path': relativePath,
+      },
+    );
+    if (!response.success) throw Exception(response.message);
+
+    final payload = _payloadAsMap(response.details);
+    return GitReadFileResult(
+      relativePath: _readString(
+        payload,
+        const ['relative_path', 'path'],
+        fallback: relativePath,
+      ),
+      content: _readString(payload, const ['content'], fallback: ''),
+      truncated: _readBool(payload, const ['truncated']) ?? false,
+      maxChars: _readInt(payload, const ['max_chars'], fallback: 500000),
+    );
+  }
+
   Future<GitOperationResult> _get(
     String path, {
     Map<String, String>? query,
@@ -991,6 +1044,24 @@ class GitService extends ChangeNotifier {
         })
         .where((item) => item.path.isNotEmpty)
         .toList();
+  }
+
+  List<GitRepoNode> _parseRepoNodes(List<dynamic> raw) {
+    return raw
+        .whereType<Map<String, dynamic>>()
+        .map(_parseRepoNode)
+        .where((item) => item.path.isNotEmpty || item.name.isNotEmpty)
+        .toList(growable: false);
+  }
+
+  GitRepoNode _parseRepoNode(Map<String, dynamic> raw) {
+    final childrenRaw = _readList(raw, const ['children', 'items', 'files']);
+    return GitRepoNode(
+      name: _readString(raw, const ['name'], fallback: ''),
+      path: _readString(raw, const ['path'], fallback: ''),
+      type: _readString(raw, const ['type'], fallback: 'file'),
+      children: _parseRepoNodes(childrenRaw),
+    );
   }
 
   List<GitBranchRef> _parseBranchRefs(

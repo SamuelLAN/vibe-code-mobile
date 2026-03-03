@@ -5,3 +5,4 @@ export 'log_modal.dart';
 export 'branch_modal.dart';
 export 'file_diff_modal.dart';
 export 'run_stream_modal.dart';
+export 'repo_files_modal.dart';

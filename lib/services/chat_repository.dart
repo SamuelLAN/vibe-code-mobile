@@ -160,7 +160,7 @@ class ChatRepository {
     if (accessToken == null) return;
 
     final lastServerTitle = _serverTitleCache[chat.id];
-    if (lastServerTitle == null || lastServerTitle == chat.title) {
+    if (lastServerTitle == chat.title) {
       return;
     }
 

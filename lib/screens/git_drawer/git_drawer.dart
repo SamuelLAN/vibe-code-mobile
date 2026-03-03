@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:convert';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -7,6 +8,7 @@ import 'package:provider/provider.dart';
 import '../../../constants/colors.dart';
 import '../../../models/git_models.dart';
 import '../../../services/git_service.dart';
+import '../../../services/secure_store.dart';
 import 'enums.dart';
 import 'modals/modals.dart';
 
@@ -23,6 +25,8 @@ class GitDrawer extends StatefulWidget {
 }
 
 class _GitDrawerState extends State<GitDrawer> {
+  static const String _cacheKeyPrefix = 'git_drawer_cache_v1_';
+
   GitOpStatus _pullStatus = GitOpStatus.idle;
   GitOpStatus _pushStatus = GitOpStatus.idle;
   GitOpStatus _commitStatus = GitOpStatus.idle;
@@ -46,7 +50,9 @@ class _GitDrawerState extends State<GitDrawer> {
   List<GitCommit> _logCommits = const [];
   List<GitCommit> _resetCandidates = const [];
   bool _initialLoading = true;
+  bool _isRefreshingSlider = false;
   bool _worktreeActionLoading = false;
+  final SecureStore _store = const SecureStore();
 
   String? _toastMessage;
   Color? _toastColor;
@@ -57,18 +63,102 @@ class _GitDrawerState extends State<GitDrawer> {
   @override
   void initState() {
     super.initState();
-    unawaited(_refreshSliderData(initial: true));
+    unawaited(_hydrateFromCacheAndRefresh(initial: true));
   }
 
   @override
   void didUpdateWidget(covariant GitDrawer oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (oldWidget.projectName != widget.projectName) {
-      unawaited(_refreshSliderData());
+      unawaited(_hydrateFromCacheAndRefresh());
+    }
+  }
+
+  Future<void> _hydrateFromCacheAndRefresh({bool initial = false}) async {
+    await _loadSliderCache();
+    await _refreshSliderData(initial: initial);
+  }
+
+  String _cacheKeyForProject(String projectName) {
+    return '$_cacheKeyPrefix${Uri.encodeComponent(projectName)}';
+  }
+
+  Future<void> _loadSliderCache() async {
+    try {
+      final raw = await _store.read(_cacheKeyForProject(widget.projectName));
+      if (raw == null || raw.trim().isEmpty) return;
+      final decoded = jsonDecode(raw);
+      if (decoded is! Map) return;
+      final map = Map<String, dynamic>.from(decoded);
+      final summaryMap = map['summary'];
+      final runStatusMap = map['run_status'];
+      final worktreeMap = map['worktree'];
+      final pushPreviewMap = map['push_preview'];
+      if (summaryMap is! Map || runStatusMap is! Map || worktreeMap is! Map) {
+        return;
+      }
+
+      final summary = _summaryFromMap(Map<String, dynamic>.from(summaryMap));
+      final runStatus =
+          _runStatusFromMap(Map<String, dynamic>.from(runStatusMap));
+      final worktree = _worktreeFromMap(Map<String, dynamic>.from(worktreeMap));
+      final pushPreview = pushPreviewMap is Map
+          ? _pushPreviewFromMap(Map<String, dynamic>.from(pushPreviewMap))
+          : null;
+      if (!mounted) return;
+      setState(() {
+        _summary = summary;
+        _runStatus = runStatus;
+        _worktree = worktree;
+        _pushPreview = pushPreview;
+        _initialLoading = false;
+        final devRunning = _isTaskRunning('dev');
+        final previewRunning = _isTaskRunning('preview');
+        if (devRunning) {
+          _runDevStatus = ProjectOpStatus.running;
+        } else if (_runDevStatus == ProjectOpStatus.running) {
+          _runDevStatus = ProjectOpStatus.stopped;
+        }
+        if (previewRunning) {
+          _runPreviewStatus = ProjectOpStatus.running;
+        } else if (_runPreviewStatus == ProjectOpStatus.running) {
+          _runPreviewStatus = ProjectOpStatus.stopped;
+        }
+      });
+    } catch (_) {
+      // Ignore cache read/parse failure and fall back to live refresh.
+    }
+  }
+
+  Future<void> _saveSliderCache({
+    required GitSummary summary,
+    required GitRunStatus runStatus,
+    required GitWorktreeStatus worktree,
+    required GitPushSummary? pushPreview,
+  }) async {
+    try {
+      final payload = <String, dynamic>{
+        'summary': _summaryToMap(summary),
+        'run_status': _runStatusToMap(runStatus),
+        'worktree': _worktreeToMap(worktree),
+        'push_preview':
+            pushPreview == null ? null : _pushPreviewToMap(pushPreview),
+        'saved_at': DateTime.now().toIso8601String(),
+      };
+      await _store.write(
+        _cacheKeyForProject(widget.projectName),
+        jsonEncode(payload),
+      );
+    } catch (_) {
+      // Ignore cache write failure and keep runtime state only.
     }
   }
 
   Future<void> _refreshSliderData({bool initial = false}) async {
+    if (_isRefreshingSlider) return;
+    if (mounted) {
+      setState(() => _isRefreshingSlider = true);
+    }
     try {
       final results = await Future.wait<dynamic>([
         _git.getSummary(projectName: widget.projectName),
@@ -78,11 +168,15 @@ class _GitDrawerState extends State<GitDrawer> {
       ]);
 
       if (!mounted) return;
+      final summary = results[0] as GitSummary;
+      final runStatus = results[1] as GitRunStatus;
+      final worktree = results[2] as GitWorktreeStatus;
+      final pushPreview = results[3] as GitPushSummary;
       setState(() {
-        _summary = results[0] as GitSummary;
-        _runStatus = results[1] as GitRunStatus;
-        _worktree = results[2] as GitWorktreeStatus;
-        _pushPreview = results[3] as GitPushSummary;
+        _summary = summary;
+        _runStatus = runStatus;
+        _worktree = worktree;
+        _pushPreview = pushPreview;
         final devRunning = _isTaskRunning('dev');
         final previewRunning = _isTaskRunning('preview');
         if (devRunning) {
@@ -100,12 +194,121 @@ class _GitDrawerState extends State<GitDrawer> {
           }
         }
         _initialLoading = false;
+        _isRefreshingSlider = false;
       });
+      await _saveSliderCache(
+        summary: summary,
+        runStatus: runStatus,
+        worktree: worktree,
+        pushPreview: pushPreview,
+      );
     } catch (e) {
       if (!mounted) return;
-      setState(() => _initialLoading = false);
+      setState(() {
+        _initialLoading = false;
+        _isRefreshingSlider = false;
+      });
       _showToast('Failed to load Git status: $e', color: GitColors.error);
     }
+  }
+
+  Map<String, dynamic> _summaryToMap(GitSummary value) => <String, dynamic>{
+        'branch': value.branch,
+        'ahead_count': value.aheadCount,
+        'behind_count': value.behindCount,
+        'changed_file_count': value.changedFileCount,
+        'running_task_count': value.runningTaskCount,
+      };
+
+  GitSummary _summaryFromMap(Map<String, dynamic> map) => GitSummary(
+        branch: map['branch']?.toString() ?? '',
+        aheadCount: (map['ahead_count'] as num?)?.toInt() ?? 0,
+        behindCount: (map['behind_count'] as num?)?.toInt() ?? 0,
+        changedFileCount: (map['changed_file_count'] as num?)?.toInt() ?? 0,
+        runningTaskCount: (map['running_task_count'] as num?)?.toInt() ?? 0,
+      );
+
+  Map<String, dynamic> _pushPreviewToMap(GitPushSummary value) =>
+      <String, dynamic>{
+        'branch': value.branch,
+        'ahead_count': value.aheadCount,
+        'remote': value.remote,
+        'remote_branch': value.remoteBranch,
+      };
+
+  GitPushSummary _pushPreviewFromMap(Map<String, dynamic> map) =>
+      GitPushSummary(
+        branch: map['branch']?.toString() ?? '',
+        aheadCount: (map['ahead_count'] as num?)?.toInt() ?? 0,
+        remote: map['remote']?.toString() ?? 'origin',
+        remoteBranch: map['remote_branch']?.toString(),
+      );
+
+  Map<String, dynamic> _runStatusToMap(GitRunStatus value) => <String, dynamic>{
+        'running_task_count': value.runningTaskCount,
+        'tasks': value.tasks
+            .map(
+              (task) => <String, dynamic>{
+                'task_name': task.taskName,
+                'command': task.command,
+                'status': task.status,
+                'pid': task.pid,
+              },
+            )
+            .toList(),
+      };
+
+  GitRunStatus _runStatusFromMap(Map<String, dynamic> map) {
+    final taskItems = map['tasks'] as List? ?? const [];
+    final tasks = taskItems
+        .whereType<Map>()
+        .map(
+          (task) => GitRunTask(
+            taskName: task['task_name']?.toString() ?? '',
+            command: task['command']?.toString(),
+            status: task['status']?.toString(),
+            pid: (task['pid'] as num?)?.toInt(),
+          ),
+        )
+        .toList();
+    return GitRunStatus(
+      runningTaskCount: (map['running_task_count'] as num?)?.toInt() ?? 0,
+      tasks: tasks,
+    );
+  }
+
+  Map<String, dynamic> _worktreeToMap(GitWorktreeStatus value) =>
+      <String, dynamic>{
+        'files': value.files
+            .map(
+              (file) => <String, dynamic>{
+                'path': file.path,
+                'status_code': file.statusCode,
+              },
+            )
+            .toList(),
+        'counts': value.counts,
+      };
+
+  GitWorktreeStatus _worktreeFromMap(Map<String, dynamic> map) {
+    final fileItems = map['files'] as List? ?? const [];
+    final files = fileItems
+        .whereType<Map>()
+        .map(
+          (file) => GitWorktreeFile(
+            path: file['path']?.toString() ?? '',
+            statusCode: file['status_code']?.toString() ?? 'M',
+          ),
+        )
+        .toList();
+    final rawCounts = map['counts'];
+    final counts = <String, int>{};
+    if (rawCounts is Map) {
+      for (final entry in rawCounts.entries) {
+        counts[entry.key.toString()] = (entry.value as num?)?.toInt() ?? 0;
+      }
+    }
+    return GitWorktreeStatus(files: files, counts: counts);
   }
 
   bool _isTaskRunning(String scriptName) {
@@ -244,7 +447,8 @@ class _GitDrawerState extends State<GitDrawer> {
     final theme = Theme.of(context);
     final isDark = theme.brightness == Brightness.dark;
     final summary = _summary;
-    final currentBranch = summary?.branch ?? 'main';
+    final currentBranch =
+        summary?.branch ?? (_initialLoading ? 'Loading...' : 'Unknown');
     final commitsAhead = _pushPreview?.aheadCount ?? summary?.aheadCount ?? 0;
     final devRunning = _isTaskRunning('dev');
     final previewRunning = _isTaskRunning('preview');
@@ -505,6 +709,14 @@ class _GitDrawerState extends State<GitDrawer> {
                                 accentColor: GitColors.branch,
                                 onPress: () => _showBranchModal(context),
                               ),
+                              _buildGitOpButton(
+                                icon: Icons.folder_open_rounded,
+                                label: 'Files',
+                                sublabel: 'Browse and read project files',
+                                status: GitOpStatus.idle,
+                                accentColor: GitColors.branch,
+                                onPress: () => _showFilesModal(context),
+                              ),
                               const SizedBox(height: 16),
                               _buildStatusCard(theme, isDark),
                               const SizedBox(height: 40),
@@ -618,9 +830,15 @@ class _GitDrawerState extends State<GitDrawer> {
           ),
           const Spacer(),
           IconButton(
-            icon: const Icon(Icons.refresh_rounded, size: 18),
+            icon: _isRefreshingSlider
+                ? const SizedBox(
+                    width: 18,
+                    height: 18,
+                    child: CircularProgressIndicator(strokeWidth: 2),
+                  )
+                : const Icon(Icons.refresh_rounded, size: 18),
             visualDensity: VisualDensity.compact,
-            onPressed: _refreshSliderData,
+            onPressed: _isRefreshingSlider ? null : _refreshSliderData,
             tooltip: 'Refresh',
           ),
         ],
@@ -1202,6 +1420,30 @@ class _GitDrawerState extends State<GitDrawer> {
               setStatus: (s) => setState(() => _resetStatus = s),
             );
           },
+        ),
+      ),
+    );
+  }
+
+  Future<void> _showFilesModal(BuildContext context) async {
+    await showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      enableDrag: true,
+      isDismissible: true,
+      backgroundColor: Colors.transparent,
+      builder: (context) => FractionallySizedBox(
+        heightFactor: 0.9,
+        child: RepoFilesModal(
+          onListDir: (relativePath, depth) => _git.listDir(
+            projectName: widget.projectName,
+            relativePath: relativePath,
+            depth: depth,
+          ),
+          onReadFile: (relativePath) => _git.readFile(
+            projectName: widget.projectName,
+            relativePath: relativePath,
+          ),
         ),
       ),
     );

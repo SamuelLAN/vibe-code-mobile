@@ -46,9 +46,12 @@ class _ChatScreenState extends State<ChatScreen> {
   final AudioPlayerService _audioPlayer = AudioPlayerService();
   final PermissionService _permissionService = PermissionService();
   late final List<String> _projects = List<String>.from(_defaultProjects);
-  InputMode _inputMode = InputMode.voice;
+  InputMode _inputMode = InputMode.text;
+  ChatModelTier _modelTier = ChatModelTier.flash;
   bool _isFullscreenInput = false;
   String _selectedProject = _defaultProjects.first;
+  String? _lastObservedChatId;
+  bool _pendingScrollToLatest = false;
 
   @override
   void initState() {
@@ -257,6 +260,24 @@ class _ChatScreenState extends State<ChatScreen> {
     });
   }
 
+  void _syncAutoScrollOnChatSwitch(ChatService chat, List<Message> messages) {
+    final activeChatId = chat.activeChat?.id;
+    if (_lastObservedChatId != activeChatId) {
+      _lastObservedChatId = activeChatId;
+      _pendingScrollToLatest = true;
+    }
+    if (!_pendingScrollToLatest) return;
+    if (_isFullscreenInput) return;
+    if (activeChatId == null || messages.isEmpty) return;
+    if (chat.isLoadingOlderHistory) return;
+
+    _pendingScrollToLatest = false;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted || !_scrollController.hasClients) return;
+      _scrollController.jumpTo(_scrollController.position.maxScrollExtent);
+    });
+  }
+
   void _dismissKeyboard() {
     final currentFocus = FocusScope.of(context);
     if (!currentFocus.hasPrimaryFocus && currentFocus.focusedChild != null) {
@@ -461,6 +482,13 @@ class _ChatScreenState extends State<ChatScreen> {
     });
   }
 
+  void _onModelTierChanged(ChatModelTier tier) {
+    if (_modelTier == tier) return;
+    setState(() {
+      _modelTier = tier;
+    });
+  }
+
   Future<void> _showMediaPicker() async {
     await showModalBottomSheet<void>(
       context: context,
@@ -562,6 +590,7 @@ class _ChatScreenState extends State<ChatScreen> {
     final chat = context.watch<ChatService>();
     final auth = context.read<AuthService>();
     final messages = chat.messages;
+    _syncAutoScrollOnChatSwitch(chat, messages);
     const projectTextStyle = TextStyle(
       fontSize: 15,
       fontWeight: FontWeight.w600,
@@ -800,10 +829,12 @@ class _ChatScreenState extends State<ChatScreen> {
               Expanded(
                 child: InputBar.withRecorder(
                   mode: _inputMode,
+                  modelTier: _modelTier,
                   controller: _textController,
                   isGenerating: chat.isGenerating,
                   onSend: _sendMessage,
                   onStop: chat.stopGeneration,
+                  onModelTierChanged: _onModelTierChanged,
                   onToggleMode: _toggleInputMode,
                   onPickMedia: _showMediaPicker,
                   onPickFiles: _pickFiles,
@@ -821,10 +852,12 @@ class _ChatScreenState extends State<ChatScreen> {
             else
               InputBar.withRecorder(
                 mode: _inputMode,
+                modelTier: _modelTier,
                 controller: _textController,
                 isGenerating: chat.isGenerating,
                 onSend: _sendMessage,
                 onStop: chat.stopGeneration,
+                onModelTierChanged: _onModelTierChanged,
                 onToggleMode: _toggleInputMode,
                 onPickMedia: _showMediaPicker,
                 onPickFiles: _pickFiles,

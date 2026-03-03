@@ -156,6 +156,27 @@ class ChatService extends ChangeNotifier {
     }
   }
 
+  Future<void> refreshChatTitlesFromServer({bool silent = false}) async {
+    if (_isRefreshingChats) return;
+    _isRefreshingChats = true;
+    if (!silent) {
+      notifyListeners();
+    }
+    try {
+      _chats = await _repo.getChats(forceRefresh: true);
+      if (_chats.isEmpty) return;
+
+      final activeId = _activeChat?.id;
+      _activeChat = _chats.firstWhere(
+        (chat) => chat.id == activeId,
+        orElse: () => _chats.first,
+      );
+    } finally {
+      _isRefreshingChats = false;
+      notifyListeners();
+    }
+  }
+
   Future<void> selectChat(String chatId) async {
     _historyError = null;
     await _repo.setActiveChat(chatId);
@@ -246,6 +267,7 @@ class ChatService extends ChangeNotifier {
     final trimmedText = text.trim();
     final shouldGenerateTitle = _messages.isEmpty &&
         trimmedText.isNotEmpty &&
+        _isUntitledTitle(_activeChat!.title) &&
         !_titleGeneratedChatIds.contains(chatId);
 
     final userMessage = Message(
@@ -547,10 +569,6 @@ class ChatService extends ChangeNotifier {
 
   Future<void> _updateChatMeta(String text) async {
     if (_activeChat == null) return;
-    if (_activeChat!.title == 'New Chat') {
-      _activeChat!.title =
-          text.length > 32 ? '${text.substring(0, 32)}…' : text;
-    }
     _activeChat!.updatedAt = DateTime.now();
     _activeChat!.lastMessagePreview =
         text.length > 60 ? '${text.substring(0, 60)}…' : text;
@@ -580,6 +598,11 @@ class ChatService extends ChangeNotifier {
     _chats.sort((a, b) => b.updatedAt.compareTo(a.updatedAt));
     await _repo.updateChat(chat);
     notifyListeners();
+  }
+
+  bool _isUntitledTitle(String title) {
+    final trimmed = title.trim();
+    return trimmed.isEmpty || trimmed.toLowerCase() == 'new chat';
   }
 
   Future<_GenerationResult> _generateAssistantResponse(

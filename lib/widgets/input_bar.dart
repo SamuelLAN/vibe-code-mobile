@@ -6,15 +6,18 @@ import '../services/permission_service.dart';
 import 'waveform_indicator.dart';
 
 enum InputMode { voice, text }
+enum ChatModelTier { flash, pro }
 
 class InputBar extends StatefulWidget {
   const InputBar({
     super.key,
     required this.mode,
+    required this.modelTier,
     required this.controller,
     required this.isGenerating,
     required this.onSend,
     required this.onStop,
+    required this.onModelTierChanged,
     required this.onToggleMode,
     required this.onPickMedia,
     required this.onPickFiles,
@@ -27,10 +30,12 @@ class InputBar extends StatefulWidget {
   const InputBar.withRecorder({
     super.key,
     required this.mode,
+    required this.modelTier,
     required this.controller,
     required this.isGenerating,
     required this.onSend,
     required this.onStop,
+    required this.onModelTierChanged,
     required this.onToggleMode,
     required this.onPickMedia,
     required this.onPickFiles,
@@ -42,10 +47,12 @@ class InputBar extends StatefulWidget {
   }) : _recorder = recorder;
 
   final InputMode mode;
+  final ChatModelTier modelTier;
   final TextEditingController controller;
   final bool isGenerating;
   final VoidCallback onSend;
   final VoidCallback onStop;
+  final ValueChanged<ChatModelTier> onModelTierChanged;
   final VoidCallback onToggleMode;
   final VoidCallback onPickMedia;
   final VoidCallback onPickFiles;
@@ -147,6 +154,51 @@ class _InputBarState extends State<InputBar> {
     );
   }
 
+  Widget _buildModelTierSwitch() {
+    Widget buildTierButton(ChatModelTier tier, String label) {
+      final isSelected = widget.modelTier == tier;
+      return Expanded(
+        child: GestureDetector(
+          behavior: HitTestBehavior.opaque,
+          onTap: () => widget.onModelTierChanged(tier),
+          child: AnimatedContainer(
+            duration: const Duration(milliseconds: 120),
+            curve: Curves.easeOut,
+            alignment: Alignment.center,
+            decoration: BoxDecoration(
+              color: isSelected ? const Color(0xFFE8EEF9) : Colors.transparent,
+              borderRadius: BorderRadius.circular(16),
+            ),
+            child: Text(
+              label,
+              style: TextStyle(
+                fontSize: 14,
+                fontWeight: FontWeight.w600,
+                color: isSelected ? Colors.black87 : Colors.black54,
+              ),
+            ),
+          ),
+        ),
+      );
+    }
+
+    return Container(
+      width: 94,
+      height: 36,
+      padding: const EdgeInsets.all(3),
+      decoration: BoxDecoration(
+        color: const Color(0xFFF3F4F6),
+        borderRadius: BorderRadius.circular(18),
+      ),
+      child: Row(
+        children: [
+          buildTierButton(ChatModelTier.flash, 'flash'),
+          buildTierButton(ChatModelTier.pro, 'pro'),
+        ],
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     if (_isFullscreen) {
@@ -166,9 +218,8 @@ class _InputBarState extends State<InputBar> {
                 padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
                 decoration: BoxDecoration(
                   color: Colors.white,
-                  border: Border(
-                      top: BorderSide(
-                          color: Colors.grey.withOpacity(0.2), width: 0.5)),
+                  borderRadius:
+                      const BorderRadius.vertical(top: Radius.circular(26)),
                 ),
                 child: Row(
                   children: [
@@ -224,6 +275,8 @@ class _InputBarState extends State<InputBar> {
                               ),
                             ),
                     ),
+                    const SizedBox(width: 8),
+                    _buildModelTierSwitch(),
                     if (widget.isGenerating || (_isFocused && _hasText)) ...[
                       _buildSendButton(),
                     ] else if (_hasMultipleLines) ...[
@@ -297,6 +350,7 @@ class _InputBarState extends State<InputBar> {
                     icon: const Icon(Icons.camera_alt_outlined,
                         size: 30, color: Colors.black87),
                   ),
+                  _buildModelTierSwitch(),
                   const Spacer(),
                   _buildCollapseButton(),
                 ],

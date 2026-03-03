@@ -170,3 +170,33 @@ class GitSseEvent {
   bool get isError => name == 'error';
   bool get isLog => name == 'log';
 }
+
+class GitRepoNode {
+  GitRepoNode({
+    required this.name,
+    required this.path,
+    required this.type,
+    this.children = const [],
+  });
+
+  final String name;
+  final String path;
+  final String type;
+  final List<GitRepoNode> children;
+
+  bool get isDir => type.toLowerCase() == 'dir';
+}
+
+class GitReadFileResult {
+  GitReadFileResult({
+    required this.relativePath,
+    required this.content,
+    required this.truncated,
+    required this.maxChars,
+  });
+
+  final String relativePath;
+  final String content;
+  final bool truncated;
+  final int maxChars;
+}
