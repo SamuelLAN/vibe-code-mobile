@@ -582,175 +582,181 @@ class _FilePreviewSheetState extends State<_FilePreviewSheet> {
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final language = _languageFromPath(widget.result.relativePath);
-    return Container(
-      decoration: BoxDecoration(
-        color: isDark ? const Color(0xFF1E1E1E) : Colors.white,
-        borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
-      ),
-      child: SafeArea(
-        child: Column(
-          children: [
-            Container(
-              width: 36,
-              height: 4,
-              margin: const EdgeInsets.only(top: 10),
-              decoration: BoxDecoration(
-                color: Colors.grey[400],
-                borderRadius: BorderRadius.circular(2),
+    return GestureDetector(
+      behavior: HitTestBehavior.translucent,
+      onTap: () => FocusScope.of(context).unfocus(),
+      child: Container(
+        decoration: BoxDecoration(
+          color: isDark ? const Color(0xFF1E1E1E) : Colors.white,
+          borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
+        ),
+        child: SafeArea(
+          child: Column(
+            children: [
+              Container(
+                width: 36,
+                height: 4,
+                margin: const EdgeInsets.only(top: 10),
+                decoration: BoxDecoration(
+                  color: Colors.grey[400],
+                  borderRadius: BorderRadius.circular(2),
+                ),
               ),
-            ),
-            Padding(
-              padding: const EdgeInsets.fromLTRB(16, 14, 16, 8),
-              child: Row(
-                children: [
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          widget.result.relativePath,
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: TextStyle(
-                            fontSize: 14,
-                            fontWeight: FontWeight.w700,
-                            color: isDark ? Colors.white : Colors.black87,
-                          ),
-                        ),
-                        Text(
-                          _editing
-                              ? 'Editing'
-                              : (language == null ? 'Text preview' : language),
-                          style: TextStyle(
-                            fontSize: 12,
-                            color: Colors.grey[600],
-                          ),
-                        ),
-                        if (widget.result.truncated)
+              Padding(
+                padding: const EdgeInsets.fromLTRB(16, 14, 16, 8),
+                child: Row(
+                  children: [
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
                           Text(
-                            'Truncated to ${widget.result.maxChars} chars',
+                            widget.result.relativePath,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
                             style: TextStyle(
-                              fontSize: 12,
-                              color: Colors.orange[700],
+                              fontSize: 14,
+                              fontWeight: FontWeight.w700,
+                              color: isDark ? Colors.white : Colors.black87,
                             ),
                           ),
-                      ],
+                          Text(
+                            _editing
+                                ? 'Editing'
+                                : (language == null
+                                    ? 'Text preview'
+                                    : language),
+                            style: TextStyle(
+                              fontSize: 12,
+                              color: Colors.grey[600],
+                            ),
+                          ),
+                          if (widget.result.truncated)
+                            Text(
+                              'Truncated to ${widget.result.maxChars} chars',
+                              style: TextStyle(
+                                fontSize: 12,
+                                color: Colors.orange[700],
+                              ),
+                            ),
+                        ],
+                      ),
+                    ),
+                    IconButton(
+                      icon: Icon(_editing
+                          ? Icons.visibility_rounded
+                          : Icons.edit_rounded),
+                      tooltip: _editing ? 'Preview' : 'Edit',
+                      onPressed: _saving || _deleting
+                          ? null
+                          : () => setState(() => _editing = !_editing),
+                    ),
+                    IconButton(
+                      icon: _deleting
+                          ? const SizedBox(
+                              width: 18,
+                              height: 18,
+                              child: CircularProgressIndicator(strokeWidth: 2),
+                            )
+                          : const Icon(Icons.delete_outline_rounded),
+                      tooltip: 'Remove file',
+                      onPressed: _saving || _deleting
+                          ? null
+                          : () async {
+                              setState(() => _deleting = true);
+                              try {
+                                await widget.onDelete();
+                              } finally {
+                                if (mounted) {
+                                  setState(() => _deleting = false);
+                                }
+                              }
+                            },
+                    ),
+                    IconButton(
+                      icon: Icon(Icons.close, color: Colors.grey[600]),
+                      onPressed: () => Navigator.pop(context),
+                    ),
+                  ],
+                ),
+              ),
+              Expanded(
+                child: Container(
+                  width: double.infinity,
+                  margin: const EdgeInsets.fromLTRB(12, 0, 12, 12),
+                  decoration: BoxDecoration(
+                    borderRadius: BorderRadius.circular(12),
+                    color: isDark
+                        ? const Color(0xFF111111)
+                        : const Color(0xFFF5F5F5),
+                    border: Border.all(
+                        color: isDark ? Colors.white12 : Colors.black12),
+                  ),
+                  child: _editing
+                      ? Padding(
+                          padding: const EdgeInsets.all(10),
+                          child: TextField(
+                            controller: _controller,
+                            expands: true,
+                            maxLines: null,
+                            minLines: null,
+                            style: TextStyle(
+                              fontSize: 12,
+                              height: 1.45,
+                              fontFamily: 'monospace',
+                              color: isDark ? Colors.white : Colors.black87,
+                            ),
+                            decoration: const InputDecoration(
+                              border: InputBorder.none,
+                              isDense: true,
+                            ),
+                          ),
+                        )
+                      : _CodeView(
+                          content: _controller.text,
+                          language: language,
+                          isDark: isDark,
+                        ),
+                ),
+              ),
+              if (_editing)
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(12, 0, 12, 12),
+                  child: SizedBox(
+                    width: double.infinity,
+                    child: FilledButton.icon(
+                      onPressed: _saving
+                          ? null
+                          : () async {
+                              setState(() => _saving = true);
+                              try {
+                                await widget.onSave(_controller.text);
+                                if (!mounted) return;
+                                setState(() => _editing = false);
+                              } catch (e) {
+                                if (!mounted) return;
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  SnackBar(content: Text('Save failed: $e')),
+                                );
+                              } finally {
+                                if (mounted) {
+                                  setState(() => _saving = false);
+                                }
+                              }
+                            },
+                      icon: _saving
+                          ? const SizedBox(
+                              width: 16,
+                              height: 16,
+                              child: CircularProgressIndicator(strokeWidth: 2),
+                            )
+                          : const Icon(Icons.save_rounded),
+                      label: Text(_saving ? 'Saving...' : 'Save file'),
                     ),
                   ),
-                  IconButton(
-                    icon: Icon(_editing
-                        ? Icons.visibility_rounded
-                        : Icons.edit_rounded),
-                    tooltip: _editing ? 'Preview' : 'Edit',
-                    onPressed: _saving || _deleting
-                        ? null
-                        : () => setState(() => _editing = !_editing),
-                  ),
-                  IconButton(
-                    icon: _deleting
-                        ? const SizedBox(
-                            width: 18,
-                            height: 18,
-                            child: CircularProgressIndicator(strokeWidth: 2),
-                          )
-                        : const Icon(Icons.delete_outline_rounded),
-                    tooltip: 'Remove file',
-                    onPressed: _saving || _deleting
-                        ? null
-                        : () async {
-                            setState(() => _deleting = true);
-                            try {
-                              await widget.onDelete();
-                            } finally {
-                              if (mounted) {
-                                setState(() => _deleting = false);
-                              }
-                            }
-                          },
-                  ),
-                  IconButton(
-                    icon: Icon(Icons.close, color: Colors.grey[600]),
-                    onPressed: () => Navigator.pop(context),
-                  ),
-                ],
-              ),
-            ),
-            Expanded(
-              child: Container(
-                width: double.infinity,
-                margin: const EdgeInsets.fromLTRB(12, 0, 12, 12),
-                decoration: BoxDecoration(
-                  borderRadius: BorderRadius.circular(12),
-                  color: isDark
-                      ? const Color(0xFF111111)
-                      : const Color(0xFFF5F5F5),
-                  border: Border.all(
-                      color: isDark ? Colors.white12 : Colors.black12),
                 ),
-                child: _editing
-                    ? Padding(
-                        padding: const EdgeInsets.all(10),
-                        child: TextField(
-                          controller: _controller,
-                          expands: true,
-                          maxLines: null,
-                          minLines: null,
-                          style: TextStyle(
-                            fontSize: 12,
-                            height: 1.45,
-                            fontFamily: 'monospace',
-                            color: isDark ? Colors.white : Colors.black87,
-                          ),
-                          decoration: const InputDecoration(
-                            border: InputBorder.none,
-                            isDense: true,
-                          ),
-                        ),
-                      )
-                    : _CodeView(
-                        content: _controller.text,
-                        language: language,
-                        isDark: isDark,
-                      ),
-              ),
-            ),
-            if (_editing)
-              Padding(
-                padding: const EdgeInsets.fromLTRB(12, 0, 12, 12),
-                child: SizedBox(
-                  width: double.infinity,
-                  child: FilledButton.icon(
-                    onPressed: _saving
-                        ? null
-                        : () async {
-                            setState(() => _saving = true);
-                            try {
-                              await widget.onSave(_controller.text);
-                              if (!mounted) return;
-                              setState(() => _editing = false);
-                            } catch (e) {
-                              if (!mounted) return;
-                              ScaffoldMessenger.of(context).showSnackBar(
-                                SnackBar(content: Text('Save failed: $e')),
-                              );
-                            } finally {
-                              if (mounted) {
-                                setState(() => _saving = false);
-                              }
-                            }
-                          },
-                    icon: _saving
-                        ? const SizedBox(
-                            width: 16,
-                            height: 16,
-                            child: CircularProgressIndicator(strokeWidth: 2),
-                          )
-                        : const Icon(Icons.save_rounded),
-                    label: Text(_saving ? 'Saving...' : 'Save file'),
-                  ),
-                ),
-              ),
-          ],
+            ],
+          ),
         ),
       ),
     );
@@ -838,14 +844,13 @@ class _CodeView extends StatelessWidget {
 String? _languageFromPath(String path) {
   final lower = path.toLowerCase();
   if (lower.endsWith('.py')) return 'python';
+  if (lower.endsWith('.tsx') || lower.endsWith('.jsx')) return 'javascript';
   if (lower.endsWith('.js') ||
       lower.endsWith('.mjs') ||
       lower.endsWith('.cjs')) {
     return 'javascript';
   }
-  if (lower.endsWith('.tsx')) return 'tsx';
   if (lower.endsWith('.ts')) return 'typescript';
-  if (lower.endsWith('.jsx')) return 'jsx';
   if (lower.endsWith('.json')) return 'json';
   if (lower.endsWith('.md') || lower.endsWith('.markdown')) return 'markdown';
   if (lower.endsWith('.html')) return 'xml';

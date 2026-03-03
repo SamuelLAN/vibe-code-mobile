@@ -46,12 +46,19 @@ class _ChatScreenState extends State<ChatScreen> {
   final AudioPlayerService _audioPlayer = AudioPlayerService();
   final PermissionService _permissionService = PermissionService();
   late final List<String> _projects = List<String>.from(_defaultProjects);
-  InputMode _inputMode = InputMode.text;
+  InputMode _inputMode = InputMode.voice;
   ChatModelTier _modelTier = ChatModelTier.flash;
   bool _isFullscreenInput = false;
   String _selectedProject = _defaultProjects.first;
   String? _lastObservedChatId;
   bool _pendingScrollToLatest = false;
+  static const List<(IconData, String)> _emptySuggestions = [
+    (Icons.image_outlined, '帮我生成一张产品海报'),
+    (Icons.music_note_outlined, '写一段轻松的背景音乐提示词'),
+    (Icons.school_outlined, '帮我快速学习这个项目结构'),
+    (Icons.videocam_outlined, '给我一个短视频脚本'),
+    (Icons.auto_awesome_outlined, '给我今天的工作计划建议'),
+  ];
 
   @override
   void initState() {
@@ -283,6 +290,75 @@ class _ChatScreenState extends State<ChatScreen> {
     if (!currentFocus.hasPrimaryFocus && currentFocus.focusedChild != null) {
       currentFocus.unfocus();
     }
+  }
+
+  void _applySuggestion(String text) {
+    _textController.text = text;
+    _textController.selection =
+        TextSelection.collapsed(offset: _textController.text.length);
+    setState(() {});
+  }
+
+  Widget _buildEmptyChatState() {
+    return Container(
+      decoration: const BoxDecoration(
+        gradient: LinearGradient(
+          begin: Alignment.topCenter,
+          end: Alignment.bottomCenter,
+          colors: [Color(0xFFF1F4FA), Color(0xFFE9EDF6), Color(0xFFF4F6FB)],
+        ),
+      ),
+      child: SafeArea(
+        bottom: false,
+        child: ListView(
+          padding: const EdgeInsets.fromLTRB(20, 24, 20, 20),
+          children: [
+            const SizedBox(height: 24),
+            Text(
+              '你好，Samuel',
+              style: Theme.of(context).textTheme.headlineMedium?.copyWith(
+                    fontWeight: FontWeight.w400,
+                    color: const Color(0xFF24262D),
+                  ),
+            ),
+            const SizedBox(height: 8),
+            Text(
+              '需要我为你做些什么？',
+              style: Theme.of(context).textTheme.headlineSmall?.copyWith(
+                    fontWeight: FontWeight.w700,
+                    color: const Color(0xFF11131A),
+                  ),
+            ),
+            const SizedBox(height: 24),
+            Wrap(
+              spacing: 10,
+              runSpacing: 10,
+              children: _emptySuggestions
+                  .map(
+                    (item) => ActionChip(
+                      backgroundColor: Colors.white.withValues(alpha: 0.9),
+                      side: BorderSide.none,
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(22),
+                      ),
+                      avatar: Icon(item.$1, size: 18, color: Colors.black87),
+                      label: Text(
+                        item.$2,
+                        style: const TextStyle(
+                          fontSize: 15,
+                          color: Color(0xFF20222A),
+                          fontWeight: FontWeight.w500,
+                        ),
+                      ),
+                      onPressed: () => _applySuggestion(item.$2),
+                    ),
+                  )
+                  .toList(),
+            ),
+          ],
+        ),
+      ),
+    );
   }
 
   Future<void> _pickFromCamera() async {
@@ -742,19 +818,7 @@ class _ChatScreenState extends State<ChatScreen> {
             if (!_isFullscreenInput)
               Expanded(
                 child: messages.isEmpty
-                    ? Container(
-                        color: Colors.white,
-                        child: const Center(
-                          child: Text(
-                            'Start a new chat',
-                            style: TextStyle(
-                              fontSize: 18,
-                              color: Colors.grey,
-                              fontWeight: FontWeight.w500,
-                            ),
-                          ),
-                        ),
-                      )
+                    ? _buildEmptyChatState()
                     : ListView.builder(
                         key: ValueKey<String>(
                           'chat-list-${chat.activeChat?.id ?? 'none'}',

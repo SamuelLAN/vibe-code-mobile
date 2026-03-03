@@ -155,46 +155,16 @@ class _InputBarState extends State<InputBar> {
   }
 
   Widget _buildModelTierSwitch() {
-    Widget buildTierButton(ChatModelTier tier, String label) {
-      final isSelected = widget.modelTier == tier;
-      return Expanded(
-        child: GestureDetector(
-          behavior: HitTestBehavior.opaque,
-          onTap: () => widget.onModelTierChanged(tier),
-          child: AnimatedContainer(
-            duration: const Duration(milliseconds: 120),
-            curve: Curves.easeOut,
-            alignment: Alignment.center,
-            decoration: BoxDecoration(
-              color: isSelected ? const Color(0xFFE8EEF9) : Colors.transparent,
-              borderRadius: BorderRadius.circular(16),
-            ),
-            child: Text(
-              label,
-              style: TextStyle(
-                fontSize: 14,
-                fontWeight: FontWeight.w600,
-                color: isSelected ? Colors.black87 : Colors.black54,
-              ),
-            ),
-          ),
-        ),
-      );
-    }
-
-    return Container(
-      width: 94,
-      height: 36,
-      padding: const EdgeInsets.all(3),
-      decoration: BoxDecoration(
-        color: const Color(0xFFF3F4F6),
-        borderRadius: BorderRadius.circular(18),
+    final isPro = widget.modelTier == ChatModelTier.pro;
+    return IconButton(
+      tooltip: isPro ? 'Current: pro (tap to switch to flash)' : 'Current: flash (tap to switch to pro)',
+      onPressed: () => widget.onModelTierChanged(
+        isPro ? ChatModelTier.flash : ChatModelTier.pro,
       ),
-      child: Row(
-        children: [
-          buildTierButton(ChatModelTier.flash, 'flash'),
-          buildTierButton(ChatModelTier.pro, 'pro'),
-        ],
+      icon: Icon(
+        isPro ? Icons.workspace_premium_outlined : Icons.flash_on_outlined,
+        size: 30,
+        color: Colors.black87,
       ),
     );
   }
@@ -215,102 +185,96 @@ class _InputBarState extends State<InputBar> {
             return SafeArea(
               top: false,
               child: Container(
-                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
-                decoration: BoxDecoration(
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                decoration: const BoxDecoration(
                   color: Colors.white,
-                  borderRadius:
-                      const BorderRadius.vertical(top: Radius.circular(26)),
+                  borderRadius: BorderRadius.vertical(top: Radius.circular(26)),
                 ),
-                child: Row(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
                   children: [
-                    IconButton(
-                      onPressed: widget.onPickMedia,
-                      icon: const Icon(Icons.camera_alt_outlined,
-                          size: 30, color: Colors.black87),
-                    ),
-                    Expanded(
-                      child: isVoice
-                          ? Listener(
-                              behavior: HitTestBehavior.opaque,
-                              onPointerDown: _onVoicePointerDown,
-                              onPointerMove: _onVoicePointerMove,
-                              onPointerUp: _onVoicePointerUp,
-                              onPointerCancel: _onVoicePointerCancel,
-                              child: Container(
-                                height: 44,
-                                alignment: Alignment.center,
-                                decoration: BoxDecoration(
-                                  color: Colors.grey.withOpacity(0.1),
-                                  borderRadius: BorderRadius.circular(22),
-                                ),
-                                child: const Text(
-                                  'Hold to talk',
-                                  style: TextStyle(
-                                    fontSize: 17,
-                                    fontWeight: FontWeight.w500,
-                                    color: Colors.black,
-                                  ),
-                                ),
-                              ),
-                            )
-                          : Container(
-                              decoration: BoxDecoration(
-                                color: Colors.grey.withOpacity(0.1),
-                                borderRadius: BorderRadius.circular(22),
-                              ),
-                              child: TextField(
-                                controller: widget.controller,
-                                focusNode: _focusNode,
-                                maxLines: 8,
-                                minLines: 1,
-                                style: const TextStyle(fontSize: 17),
-                                decoration: const InputDecoration(
-                                  hintText: 'Message...',
-                                  hintStyle: TextStyle(color: Colors.grey),
-                                  contentPadding: EdgeInsets.symmetric(
-                                      horizontal: 16, vertical: 10),
-                                  isDense: true,
-                                  border: InputBorder.none,
-                                ),
-                              ),
+                    if (isVoice)
+                      Listener(
+                        behavior: HitTestBehavior.opaque,
+                        onPointerDown: _onVoicePointerDown,
+                        onPointerMove: _onVoicePointerMove,
+                        onPointerUp: _onVoicePointerUp,
+                        onPointerCancel: _onVoicePointerCancel,
+                        child: Container(
+                          height: 48,
+                          alignment: Alignment.center,
+                          decoration: BoxDecoration(
+                            color: Colors.grey.withValues(alpha: 0.1),
+                            borderRadius: BorderRadius.circular(24),
+                          ),
+                          child: const Text(
+                            'Hold to talk',
+                            style: TextStyle(
+                              fontSize: 17,
+                              fontWeight: FontWeight.w500,
+                              color: Colors.black,
                             ),
+                          ),
+                        ),
+                      )
+                    else
+                      Container(
+                        decoration: BoxDecoration(
+                          color: Colors.grey.withValues(alpha: 0.1),
+                          borderRadius: BorderRadius.circular(24),
+                        ),
+                        child: TextField(
+                          controller: widget.controller,
+                          focusNode: _focusNode,
+                          maxLines: 8,
+                          minLines: 1,
+                          style: const TextStyle(fontSize: 17),
+                          decoration: const InputDecoration(
+                            hintText: 'Message...',
+                            hintStyle: TextStyle(color: Colors.grey),
+                            contentPadding: EdgeInsets.symmetric(
+                                horizontal: 16, vertical: 12),
+                            isDense: true,
+                            border: InputBorder.none,
+                          ),
+                        ),
+                      ),
+                    const SizedBox(height: 8),
+                    Row(
+                      children: [
+                        IconButton(
+                          onPressed: widget.onPickMedia,
+                          icon: const Icon(Icons.add,
+                              size: 32, color: Colors.black87),
+                        ),
+                        IconButton(
+                          onPressed: widget.onToggleMode,
+                          icon: Icon(
+                            isVoice
+                                ? Icons.keyboard_alt_outlined
+                                : Icons.mic_none_outlined,
+                            size: 30,
+                            color: Colors.black87,
+                          ),
+                        ),
+                        if (_hasMultipleLines)
+                          _buildFullscreenButton()
+                        else
+                          const SizedBox(width: 4),
+                        const Spacer(),
+                        _buildModelTierSwitch(),
+                        const SizedBox(width: 8),
+                        if (widget.isGenerating || (_isFocused && _hasText))
+                          _buildSendButton()
+                        else
+                          IconButton(
+                            onPressed: widget.onPickFiles,
+                            icon: const Icon(Icons.tune,
+                                size: 30, color: Colors.black87),
+                          ),
+                      ],
                     ),
-                    const SizedBox(width: 8),
-                    _buildModelTierSwitch(),
-                    if (widget.isGenerating || (_isFocused && _hasText)) ...[
-                      _buildSendButton(),
-                    ] else if (_hasMultipleLines) ...[
-                      _buildFullscreenButton(),
-                      IconButton(
-                        onPressed: widget.onToggleMode,
-                        icon: Icon(
-                            isVoice
-                                ? Icons.keyboard_alt_outlined
-                                : Icons.mic_none_outlined,
-                            size: 30,
-                            color: Colors.black87),
-                      ),
-                      IconButton(
-                        onPressed: widget.onPickFiles,
-                        icon: const Icon(Icons.add_circle_outline,
-                            size: 30, color: Colors.black87),
-                      ),
-                    ] else ...[
-                      IconButton(
-                        onPressed: widget.onToggleMode,
-                        icon: Icon(
-                            isVoice
-                                ? Icons.keyboard_alt_outlined
-                                : Icons.mic_none_outlined,
-                            size: 30,
-                            color: Colors.black87),
-                      ),
-                      IconButton(
-                        onPressed: widget.onPickFiles,
-                        icon: const Icon(Icons.add_circle_outline,
-                            size: 30, color: Colors.black87),
-                      ),
-                    ],
                   ],
                 ),
               ),
@@ -341,7 +305,7 @@ class _InputBarState extends State<InputBar> {
               decoration: BoxDecoration(
                 border: Border(
                     bottom: BorderSide(
-                        color: Colors.grey.withOpacity(0.2), width: 0.5)),
+                        color: Colors.grey.withValues(alpha: 0.2), width: 0.5)),
               ),
               child: Row(
                 children: [
@@ -616,9 +580,9 @@ class _InputBarState extends State<InputBar> {
           begin: Alignment.bottomCenter,
           end: Alignment.topCenter,
           colors: [
-            baseColor.withOpacity(0.9),
-            baseColor.withOpacity(0.6),
-            baseColor.withOpacity(0.0),
+            baseColor.withValues(alpha: 0.9),
+            baseColor.withValues(alpha: 0.6),
+            baseColor.withValues(alpha: 0.0),
           ],
           stops: const [0.0, 0.4, 1.0],
         ),
