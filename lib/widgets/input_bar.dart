@@ -63,6 +63,8 @@ class InputBar extends StatefulWidget {
 
 class _InputBarState extends State<InputBar> {
   static const Duration _minVoiceDuration = Duration(seconds: 2);
+  static const Color _inputBarBackgroundColor = Colors.white;
+  static const double _bottomRowIconSize = 24;
   bool _isRecording = false;
   bool _isCancelling = false;
   bool _isStartingRecording = false;
@@ -133,13 +135,6 @@ class _InputBarState extends State<InputBar> {
     );
   }
 
-  Widget _buildFullscreenButton() {
-    return IconButton(
-      onPressed: widget.onToggleFullscreen,
-      icon: const Icon(Icons.fullscreen, size: 28, color: Colors.black54),
-    );
-  }
-
   Widget _buildCollapseButton() {
     return IconButton(
       onPressed: widget.onToggleFullscreen,
@@ -150,17 +145,25 @@ class _InputBarState extends State<InputBar> {
 
   Widget _buildModelTierSwitch() {
     final isPro = widget.modelTier == ChatModelTier.pro;
-    return IconButton(
+    return TextButton(
       tooltip: isPro
           ? 'Current: pro (tap to switch to flash)'
           : 'Current: flash (tap to switch to pro)',
       onPressed: () => widget.onModelTierChanged(
         isPro ? ChatModelTier.flash : ChatModelTier.pro,
       ),
-      icon: Icon(
-        isPro ? Icons.workspace_premium_outlined : Icons.flash_on_outlined,
-        size: 30,
-        color: Colors.black87,
+      style: TextButton.styleFrom(
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+        minimumSize: const Size(0, 0),
+        tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+      ),
+      child: Text(
+        isPro ? 'Pro' : 'Flash',
+        style: const TextStyle(
+          fontSize: 14,
+          fontWeight: FontWeight.w600,
+          color: Colors.black87,
+        ),
       ),
     );
   }
@@ -173,118 +176,131 @@ class _InputBarState extends State<InputBar> {
 
     final isVoice = widget.mode == InputMode.voice;
 
-    return Stack(
-      clipBehavior: Clip.none,
-      children: [
-        Builder(
-          builder: (context) {
-            return SafeArea(
-              top: false,
-              child: Container(
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-                decoration: const BoxDecoration(
-                  color: Colors.white,
-                  borderRadius: BorderRadius.vertical(top: Radius.circular(26)),
-                ),
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    if (isVoice)
-                      Listener(
-                        behavior: HitTestBehavior.opaque,
-                        onPointerDown: _onVoicePointerDown,
-                        onPointerMove: _onVoicePointerMove,
-                        onPointerUp: _onVoicePointerUp,
-                        onPointerCancel: _onVoicePointerCancel,
-                        child: Container(
-                          height: 48,
-                          alignment: Alignment.center,
+    return Container(
+      color: _inputBarBackgroundColor,
+      child: Stack(
+        clipBehavior: Clip.none,
+        children: [
+          Builder(
+            builder: (context) {
+              return SafeArea(
+                top: false,
+                child: Container(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                  decoration: const BoxDecoration(
+                    color: _inputBarBackgroundColor,
+                    borderRadius:
+                        BorderRadius.vertical(top: Radius.circular(26)),
+                  ),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      if (isVoice)
+                        Listener(
+                          behavior: HitTestBehavior.opaque,
+                          onPointerDown: _onVoicePointerDown,
+                          onPointerMove: _onVoicePointerMove,
+                          onPointerUp: _onVoicePointerUp,
+                          onPointerCancel: _onVoicePointerCancel,
+                          child: Container(
+                            height: 48,
+                            alignment: Alignment.center,
+                            decoration: BoxDecoration(
+                              color: Colors.grey.withValues(alpha: 0.1),
+                              borderRadius: BorderRadius.circular(24),
+                            ),
+                            child: const Text(
+                              'Hold to talk',
+                              style: TextStyle(
+                                fontSize: 17,
+                                fontWeight: FontWeight.w500,
+                                color: Colors.black,
+                              ),
+                            ),
+                          ),
+                        )
+                      else
+                        Container(
                           decoration: BoxDecoration(
                             color: Colors.grey.withValues(alpha: 0.1),
                             borderRadius: BorderRadius.circular(24),
                           ),
-                          child: const Text(
-                            'Hold to talk',
-                            style: TextStyle(
-                              fontSize: 17,
-                              fontWeight: FontWeight.w500,
-                              color: Colors.black,
+                          child: TextField(
+                            controller: widget.controller,
+                            focusNode: _focusNode,
+                            maxLines: 8,
+                            minLines: 1,
+                            style: const TextStyle(fontSize: 17),
+                            decoration: const InputDecoration(
+                              hintText: 'Message...',
+                              hintStyle: TextStyle(color: Colors.grey),
+                              contentPadding: EdgeInsets.symmetric(
+                                  horizontal: 16, vertical: 12),
+                              isDense: true,
+                              border: InputBorder.none,
                             ),
                           ),
                         ),
-                      )
-                    else
-                      Container(
-                        decoration: BoxDecoration(
-                          color: Colors.grey.withValues(alpha: 0.1),
-                          borderRadius: BorderRadius.circular(24),
-                        ),
-                        child: TextField(
-                          controller: widget.controller,
-                          focusNode: _focusNode,
-                          maxLines: 8,
-                          minLines: 1,
-                          style: const TextStyle(fontSize: 17),
-                          decoration: const InputDecoration(
-                            hintText: 'Message...',
-                            hintStyle: TextStyle(color: Colors.grey),
-                            contentPadding: EdgeInsets.symmetric(
-                                horizontal: 16, vertical: 12),
-                            isDense: true,
-                            border: InputBorder.none,
-                          ),
-                        ),
-                      ),
-                    const SizedBox(height: 8),
-                    Row(
-                      children: [
-                        IconButton(
-                          onPressed: widget.onPickMedia,
-                          icon: const Icon(Icons.add,
-                              size: 32, color: Colors.black87),
-                        ),
-                        IconButton(
-                          onPressed: widget.onToggleMode,
-                          icon: Icon(
-                            isVoice
-                                ? Icons.keyboard_alt_outlined
-                                : Icons.mic_none_outlined,
-                            size: 30,
-                            color: Colors.black87,
-                          ),
-                        ),
-                        if (_hasMultipleLines)
-                          _buildFullscreenButton()
-                        else
-                          const SizedBox(width: 4),
-                        const Spacer(),
-                        _buildModelTierSwitch(),
-                        const SizedBox(width: 8),
-                        if (_isFocused && _hasText)
-                          _buildSendButton()
-                        else
+                      const SizedBox(height: 8),
+                      Row(
+                        children: [
                           IconButton(
-                            onPressed: widget.onPickFiles,
-                            icon: const Icon(Icons.tune,
-                                size: 30, color: Colors.black87),
+                            onPressed: widget.onPickMedia,
+                            icon: const Icon(Icons.add,
+                                size: _bottomRowIconSize,
+                                color: Colors.black87),
                           ),
-                      ],
-                    ),
-                  ],
+                          IconButton(
+                            onPressed: widget.onToggleMode,
+                            icon: Icon(
+                              isVoice
+                                  ? Icons.keyboard_alt_outlined
+                                  : Icons.mic_none_outlined,
+                              size: _bottomRowIconSize,
+                              color: Colors.black87,
+                            ),
+                          ),
+                          if (_hasMultipleLines)
+                            IconButton(
+                              onPressed: widget.onToggleFullscreen,
+                              icon: const Icon(
+                                Icons.fullscreen,
+                                size: _bottomRowIconSize,
+                                color: Colors.black54,
+                              ),
+                            )
+                          else
+                            const SizedBox(width: 4),
+                          const Spacer(),
+                          _buildModelTierSwitch(),
+                          const SizedBox(width: 8),
+                          if (_isFocused && _hasText)
+                            _buildSendButton()
+                          else
+                            IconButton(
+                              onPressed: widget.onPickFiles,
+                              icon: const Icon(Icons.upload_file_outlined,
+                                  size: _bottomRowIconSize,
+                                  color: Colors.black87),
+                            ),
+                        ],
+                      ),
+                    ],
+                  ),
                 ),
-              ),
-            );
-          },
-        ),
-        if (_isRecording)
-          Positioned(
-            left: 0,
-            right: 0,
-            bottom: 0,
-            child: _buildRecordingOverlay(),
+              );
+            },
           ),
-      ],
+          if (_isRecording)
+            Positioned(
+              left: 0,
+              right: 0,
+              bottom: 0,
+              child: _buildRecordingOverlay(),
+            ),
+        ],
+      ),
     );
   }
 

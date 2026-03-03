@@ -55,11 +55,11 @@ class _ChatScreenState extends State<ChatScreen> {
   String? _lastObservedChatId;
   bool _pendingScrollToLatest = false;
   static const List<(IconData, String)> _emptySuggestions = [
-    (Icons.image_outlined, '帮我生成一张产品海报'),
-    (Icons.music_note_outlined, '写一段轻松的背景音乐提示词'),
-    (Icons.school_outlined, '帮我快速学习这个项目结构'),
-    (Icons.videocam_outlined, '给我一个短视频脚本'),
-    (Icons.auto_awesome_outlined, '给我今天的工作计划建议'),
+    (Icons.account_tree_outlined, '梳理当前项目结构，并整理到 README.md'),
+    (Icons.speed_outlined, '分析这个项目的性能优化点，输出到 PERFORMANCE_OPTIMIZE.md'),
+    (Icons.rule_folder_outlined, '总结任意项目通用的代码规范与目录建议，写入 README.md'),
+    (Icons.trending_up_outlined, '深入分析最近纳指走势，给出关键驱动因素与风险点'),
+    (Icons.newspaper_outlined, '整理最近美国重大新闻，并按主题给出影响分析'),
   ];
 
   @override
@@ -253,7 +253,8 @@ class _ChatScreenState extends State<ChatScreen> {
                             } catch (e) {
                               if (!context.mounted) return;
                               ScaffoldMessenger.of(context).showSnackBar(
-                                SnackBar(content: Text('Add project failed: $e')),
+                                SnackBar(
+                                    content: Text('Add project failed: $e')),
                               );
                             } finally {
                               if (mounted) {
