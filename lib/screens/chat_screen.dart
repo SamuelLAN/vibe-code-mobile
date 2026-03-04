@@ -342,6 +342,7 @@ class _ChatScreenState extends State<ChatScreen> {
   }
 
   Widget _buildEmptyChatState() {
+    final suggestionMaxWidth = MediaQuery.sizeOf(context).width * 0.85;
     return Container(
       decoration: const BoxDecoration(
         gradient: LinearGradient(
@@ -378,7 +379,7 @@ class _ChatScreenState extends State<ChatScreen> {
               children: _emptySuggestions
                   .map(
                     (item) => ConstrainedBox(
-                      constraints: const BoxConstraints(maxWidth: 190),
+                      constraints: BoxConstraints(maxWidth: suggestionMaxWidth),
                       child: ActionChip(
                         backgroundColor: Colors.white.withValues(alpha: 0.9),
                         side: BorderSide.none,
