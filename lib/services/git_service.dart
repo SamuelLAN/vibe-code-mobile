@@ -1036,7 +1036,7 @@ class GitService extends ChangeNotifier {
           response.statusCode >= 200 && response.statusCode < 300;
       final businessSuccess = _isBusinessSuccess(payload);
       final success = httpSuccess && businessSuccess;
-      final message = _extractMessage(payload) ??
+      final message = _extractMessage(payload, includeCommandOutput: !success) ??
           (success ? 'Operation succeeded' : 'Git operation failed.');
 
       final elapsedMs = DateTime.now().difference(startedAt).inMilliseconds;
@@ -1376,14 +1376,97 @@ class GitService extends ChangeNotifier {
     }
   }
 
-  String? _extractMessage(dynamic payload) {
+  String? _extractMessage(
+    dynamic payload, {
+    bool includeCommandOutput = false,
+  }) {
+    if (payload is String) {
+      final trimmed = payload.trim();
+      if (trimmed.isNotEmpty) return trimmed;
+      return null;
+    }
+
     if (payload is Map<String, dynamic>) {
+      String? baseMessage;
       for (final key in const ['message', 'msg', 'detail', 'error']) {
-        final value = payload[key];
-        if (value is String && value.isNotEmpty) return value;
+        final value = _nullableString(payload[key])?.trim();
+        if (value != null && value.isNotEmpty) {
+          baseMessage = value;
+          break;
+        }
+      }
+
+      if (includeCommandOutput) {
+        final commandOutput = _extractCommandOutputMessage(payload);
+        if (commandOutput != null && commandOutput.isNotEmpty) {
+          if (baseMessage == null ||
+              baseMessage.isEmpty ||
+              _isGenericFailureMessage(baseMessage)) {
+            return commandOutput;
+          }
+          return '$baseMessage\n$commandOutput';
+        }
+      }
+
+      if (baseMessage != null && baseMessage.isNotEmpty) {
+        return baseMessage;
+      }
+
+      for (final key in const ['data', 'result', 'payload']) {
+        final nested = payload[key];
+        final nestedMessage = _extractMessage(
+          nested,
+          includeCommandOutput: includeCommandOutput,
+        );
+        if (nestedMessage != null && nestedMessage.isNotEmpty) {
+          return nestedMessage;
+        }
       }
     }
     return null;
+  }
+
+  String? _extractCommandOutputMessage(Map<String, dynamic> payload) {
+    final candidates = <Map<String, dynamic>>[payload];
+    for (final key in const ['data', 'result', 'payload']) {
+      final nested = payload[key];
+      if (nested is Map<String, dynamic>) {
+        candidates.add(nested);
+      }
+    }
+
+    for (final map in candidates) {
+      final stderr = _nullableString(map['stderr'])?.trim();
+      if (stderr != null && stderr.isNotEmpty) {
+        return stderr;
+      }
+      final error = _nullableString(map['error_output'])?.trim();
+      if (error != null && error.isNotEmpty) {
+        return error;
+      }
+    }
+
+    for (final map in candidates) {
+      final returnCode = _nullableInt(map['return_code']);
+      final stdout = _nullableString(map['stdout'])?.trim();
+      if (returnCode != null && returnCode != 0) {
+        if (stdout != null && stdout.isNotEmpty) {
+          return stdout;
+        }
+      }
+    }
+
+    return null;
+  }
+
+  bool _isGenericFailureMessage(String message) {
+    final normalized = message.trim().toLowerCase();
+    if (normalized.isEmpty) return true;
+    return normalized == 'failed' ||
+        normalized == 'pull failed' ||
+        normalized == 'push failed' ||
+        normalized == 'git operation failed' ||
+        normalized == 'git operation failed.';
   }
 
   List<dynamic> _readList(Map<String, dynamic> map, List<String> keys) {

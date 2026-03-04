@@ -145,14 +145,6 @@ class _InputBarState extends State<InputBar> {
 
   Widget _buildModelTierSwitch() {
     final isPro = widget.modelTier == ChatModelTier.pro;
-    final borderColor =
-        isPro ? const Color(0xFFE0B36B) : const Color(0xFFAEC2E8);
-    final labelColor =
-        isPro ? const Color(0xFF8A5A00) : const Color(0xFF2F5FA8);
-    final iconColor =
-        isPro ? const Color(0xFFB7791F) : const Color(0xFF3B73CC);
-    final backgroundColor =
-        isPro ? const Color(0xFFFFF8EC) : const Color(0xFFF4F8FF);
     return Tooltip(
       message: isPro
           ? 'Current: pro (tap to switch to flash)'
@@ -162,37 +154,25 @@ class _InputBarState extends State<InputBar> {
           isPro ? ChatModelTier.flash : ChatModelTier.pro,
         ),
         style: TextButton.styleFrom(
-          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
           minimumSize: const Size(0, 0),
           tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-          backgroundColor: backgroundColor,
+          backgroundColor: _inputBarBackgroundColor,
           side: BorderSide(
-            color: borderColor,
+            color: Colors.black.withValues(alpha: 0.2),
             width: 1,
           ),
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(14),
           ),
         ),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(
-              isPro ? Icons.auto_awesome_rounded : Icons.bolt_rounded,
-              size: 13,
-              color: iconColor,
-            ),
-            const SizedBox(width: 4),
-            Text(
-              isPro ? 'Pro' : 'Flash',
-              style: TextStyle(
-                fontSize: 12,
-                fontWeight: FontWeight.w600,
-                color: labelColor,
-                height: 1.1,
-              ),
-            ),
-          ],
+        child: Text(
+          isPro ? 'Pro' : 'Flash',
+          style: const TextStyle(
+            fontSize: 12,
+            fontWeight: FontWeight.w600,
+            color: Color(0xFF6B7280),
+          ),
         ),
       ),
     );
