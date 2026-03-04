@@ -156,6 +156,8 @@ class ChatListDrawer extends StatelessWidget {
                     child: ListTile(
                       title: Text(
                         _displayTitle(chat.title),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
                         style: const TextStyle(fontSize: 14),
                       ),
                       dense: true,

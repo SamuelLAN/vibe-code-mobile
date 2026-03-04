@@ -55,11 +55,11 @@ class _ChatScreenState extends State<ChatScreen> {
   String? _lastObservedChatId;
   bool _pendingScrollToLatest = false;
   static const List<(IconData, String)> _emptySuggestions = [
-    (Icons.account_tree_outlined, '梳理当前项目结构，并整理到 README.md'),
-    (Icons.speed_outlined, '分析这个项目的性能优化点，输出到 PERFORMANCE_OPTIMIZE.md'),
-    (Icons.rule_folder_outlined, '总结任意项目通用的代码规范与目录建议，写入 README.md'),
-    (Icons.trending_up_outlined, '深入分析最近纳指走势，给出关键驱动因素与风险点'),
-    (Icons.newspaper_outlined, '整理最近美国重大新闻，并按主题给出影响分析'),
+    (Icons.account_tree_outlined, 'Map project structure'),
+    (Icons.speed_outlined, 'Find performance wins'),
+    (Icons.rule_folder_outlined, 'Draft code standards'),
+    (Icons.trending_up_outlined, 'Analyze Nasdaq trend'),
+    (Icons.newspaper_outlined, 'Summarize US news'),
   ];
 
   @override
@@ -333,11 +333,12 @@ class _ChatScreenState extends State<ChatScreen> {
     }
   }
 
-  void _applySuggestion(String text) {
+  Future<void> _applySuggestion(String text) async {
     _textController.text = text;
     _textController.selection =
         TextSelection.collapsed(offset: _textController.text.length);
     setState(() {});
+    await _sendMessage();
   }
 
   Widget _buildEmptyChatState() {
@@ -356,7 +357,7 @@ class _ChatScreenState extends State<ChatScreen> {
           children: [
             const SizedBox(height: 24),
             Text(
-              '你好，Samuel',
+              'Hi, Samuel',
               style: Theme.of(context).textTheme.headlineMedium?.copyWith(
                     fontWeight: FontWeight.w400,
                     color: const Color(0xFF24262D),
@@ -364,7 +365,7 @@ class _ChatScreenState extends State<ChatScreen> {
             ),
             const SizedBox(height: 8),
             Text(
-              '需要我为你做些什么？',
+              'What can I help you with?',
               style: Theme.of(context).textTheme.headlineSmall?.copyWith(
                     fontWeight: FontWeight.w700,
                     color: const Color(0xFF11131A),
@@ -376,22 +377,29 @@ class _ChatScreenState extends State<ChatScreen> {
               runSpacing: 10,
               children: _emptySuggestions
                   .map(
-                    (item) => ActionChip(
-                      backgroundColor: Colors.white.withValues(alpha: 0.9),
-                      side: BorderSide.none,
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(22),
-                      ),
-                      avatar: Icon(item.$1, size: 18, color: Colors.black87),
-                      label: Text(
-                        item.$2,
-                        style: const TextStyle(
-                          fontSize: 15,
-                          color: Color(0xFF20222A),
-                          fontWeight: FontWeight.w500,
+                    (item) => ConstrainedBox(
+                      constraints: const BoxConstraints(maxWidth: 190),
+                      child: ActionChip(
+                        backgroundColor: Colors.white.withValues(alpha: 0.9),
+                        side: BorderSide.none,
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(22),
                         ),
+                        avatar: Icon(item.$1, size: 18, color: Colors.black87),
+                        label: Text(
+                          item.$2,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(
+                            fontSize: 14,
+                            color: Color(0xFF20222A),
+                            fontWeight: FontWeight.w500,
+                          ),
+                        ),
+                        onPressed: () {
+                          _applySuggestion(item.$2);
+                        },
                       ),
-                      onPressed: () => _applySuggestion(item.$2),
                     ),
                   )
                   .toList(),

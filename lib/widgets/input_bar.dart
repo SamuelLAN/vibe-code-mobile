@@ -157,6 +157,14 @@ class _InputBarState extends State<InputBar> {
           padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
           minimumSize: const Size(0, 0),
           tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+          backgroundColor: _inputBarBackgroundColor,
+          side: BorderSide(
+            color: Colors.black.withValues(alpha: 0.2),
+            width: 1,
+          ),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(14),
+          ),
         ),
         child: Text(
           isPro ? 'Pro' : 'Flash',
@@ -179,7 +187,14 @@ class _InputBarState extends State<InputBar> {
     final isVoice = widget.mode == InputMode.voice;
 
     return Container(
-      color: _inputBarBackgroundColor,
+      decoration: const BoxDecoration(
+        color: _inputBarBackgroundColor,
+        borderRadius: BorderRadius.only(
+          topLeft: Radius.circular(26),
+          topRight: Radius.circular(26),
+        ),
+      ),
+      clipBehavior: Clip.antiAlias,
       child: Stack(
         clipBehavior: Clip.none,
         children: [
@@ -192,8 +207,10 @@ class _InputBarState extends State<InputBar> {
                       const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
                   decoration: const BoxDecoration(
                     color: _inputBarBackgroundColor,
-                    borderRadius:
-                        BorderRadius.vertical(top: Radius.circular(26)),
+                    borderRadius: BorderRadius.only(
+                      topLeft: Radius.circular(26),
+                      topRight: Radius.circular(26),
+                    ),
                   ),
                   child: Column(
                     mainAxisSize: MainAxisSize.min,
@@ -225,7 +242,7 @@ class _InputBarState extends State<InputBar> {
                       else
                         Container(
                           decoration: BoxDecoration(
-                            color: Colors.grey.withValues(alpha: 0.1),
+                            color: _inputBarBackgroundColor,
                             borderRadius: BorderRadius.circular(24),
                           ),
                           child: TextField(
@@ -235,7 +252,7 @@ class _InputBarState extends State<InputBar> {
                             minLines: 1,
                             style: const TextStyle(fontSize: 17),
                             decoration: const InputDecoration(
-                              hintText: 'Message...',
+                              hintText: 'Vibe something ...',
                               hintStyle: TextStyle(color: Colors.grey),
                               contentPadding: EdgeInsets.symmetric(
                                   horizontal: 16, vertical: 12),
@@ -345,7 +362,7 @@ class _InputBarState extends State<InputBar> {
                   textAlignVertical: TextAlignVertical.top,
                   style: const TextStyle(fontSize: 17),
                   decoration: const InputDecoration(
-                    hintText: 'Message...',
+                    hintText: 'Vibe something ...',
                     hintStyle: TextStyle(color: Colors.grey),
                     border: InputBorder.none,
                   ),
