@@ -194,7 +194,6 @@ class _InputBarState extends State<InputBar> {
           topRight: Radius.circular(26),
         ),
       ),
-      clipBehavior: Clip.antiAlias,
       child: Stack(
         clipBehavior: Clip.none,
         children: [
@@ -623,7 +622,6 @@ class _InputBarState extends State<InputBar> {
         children: [
           Text(
             text,
-            key: ValueKey(_isCancelling),
             style: const TextStyle(
               color: Colors.white,
               fontSize: 18,

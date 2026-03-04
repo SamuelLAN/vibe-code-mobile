@@ -64,25 +64,32 @@ class _WaveformIndicatorState extends State<WaveformIndicator> {
 
   @override
   Widget build(BuildContext context) {
-    return Row(
-      mainAxisAlignment: MainAxisAlignment.center,
-      mainAxisSize: MainAxisSize.min,
-      children: _heights
-          .map(
-            (height) => Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 1.0),
-              child: AnimatedContainer(
-                duration: const Duration(milliseconds: 60),
-                width: 2.5,
-                height: height,
-                decoration: BoxDecoration(
-                  color: widget.color ?? Theme.of(context).colorScheme.primary,
-                  borderRadius: BorderRadius.circular(2),
+    return SizedBox(
+      height: 28,
+      child: Align(
+        alignment: Alignment.bottomCenter,
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          mainAxisSize: MainAxisSize.min,
+          children: _heights
+              .map(
+                (height) => Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 1.0),
+                  child: AnimatedContainer(
+                    duration: const Duration(milliseconds: 60),
+                    width: 2.5,
+                    height: height,
+                    decoration: BoxDecoration(
+                      color:
+                          widget.color ?? Theme.of(context).colorScheme.primary,
+                      borderRadius: BorderRadius.circular(2),
+                    ),
+                  ),
                 ),
-              ),
-            ),
-          )
-          .toList(),
+              )
+              .toList(),
+        ),
+      ),
     );
   }
 }
